@@ -3,10 +3,14 @@ import {
   extractLinksFromMarkdown,
   normalizeLinkPath,
   checkInternalLink,
+  resolveInternalLinkKey,
   checkAssetLink,
   isAssetLink,
+  createLiquidContext,
+  extractLinksWithLiquid,
 } from '../lib/extract-links'
 import { latestStable } from '@/versions/lib/enterprise-server-releases'
+import { getFeaturesByVersion } from '@/versions/middleware/features'
 import type { Page } from '@/types'
 
 describe('extractLinksFromMarkdown', () => {
@@ -107,7 +111,7 @@ Read [the docs](/docs/config) for more.
 `
     const result = extractLinksFromMarkdown(content)
 
-    // 3 internal links: AUTOTITLE link, the image link (starts with /), and docs/config
+    // Internal image hrefs that start with / count as internal links too.
     expect(result.internalLinks.length).toBeGreaterThanOrEqual(2)
     expect(result.externalLinks).toHaveLength(1)
     expect(result.imageLinks).toHaveLength(1)
@@ -135,9 +139,7 @@ Also [versioned](/enterprise-server@{{ currentVersion }}/admin).
 `
     const result = extractLinksFromMarkdown(content)
 
-    // The second link has a valid /path pattern even with Liquid syntax inside
-    // The extraction is regex-based and will pick up patterns it can match
-    // This is expected behavior - Liquid rendering happens separately
+    // Regex extraction can match Liquid syntax because rendering happens separately.
     expect(result.internalLinks.length).toBeGreaterThanOrEqual(0)
   })
 
@@ -187,7 +189,7 @@ Line 6
 
     expect(result.internalLinks).toHaveLength(2)
     expect(result.internalLinks[0].line).toBe(2)
-    // Line numbers are preserved because code block content is replaced with spaces
+    // Code block content becomes spaces, preserving line numbers.
     expect(result.internalLinks[1].line).toBe(8)
   })
 
@@ -234,9 +236,7 @@ And [another real link](/another/real/path) here.
   })
 
   test('does not mask links when backtick runs are mismatched', () => {
-    // Per CommonMark, a code span needs equal-length, maximal backtick runs on
-    // both ends. These lines have mismatched runs, so they are NOT code spans
-    // and the links between the backticks are real and must be extracted.
+    // Mismatched backtick runs are not CommonMark code spans, so the links remain real.
     const content = [
       `A single-open, double-close: \`[one](/real/one)\`\``,
       `A double-open, triple-close: \`\`[two](/real/two)\`\`\``,
@@ -247,8 +247,7 @@ And [another real link](/another/real/path) here.
   })
 
   test('still masks links inside valid multi-backtick code spans', () => {
-    // A matched double-backtick run is a real code span, even when it wraps an
-    // inner single backtick, so the link inside must be ignored.
+    // A matched double-backtick run stays a code span even when it wraps a single backtick.
     const content = `Example: \`\` \`[skip](/placeholder)\` \`\` and see [the guide](/real/guide).`
     const result = extractLinksFromMarkdown(content)
 
@@ -273,8 +272,7 @@ Broken: [AUTOTITLE](/code-security/create-custom-configuration.
 `
     const result = extractLinksFromMarkdown(content)
 
-    // The unclosed link is not extracted, and it does not swallow the real link
-    // on the next line into a giant multi-line href.
+    // The unclosed link cannot swallow a real link on the next line.
     expect(result.internalLinks.map((l) => l.href)).toEqual(['/real/target'])
   })
 
@@ -302,7 +300,6 @@ Also [generating keys][gen-keys].
     expect(result.internalLinks[0].href).toBe(
       '/authentication/connecting-to-github-with-ssh/using-ssh-agent-forwarding',
     )
-    // Anchor fragment should be stripped from the href
     expect(result.internalLinks[1].href).toBe(
       '/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent',
     )
@@ -485,7 +482,7 @@ describe('checkInternalLink', () => {
   })
 
   test('finds redirect after stripping language prefix', () => {
-    // Links from rendered HTML have /en/ prefix but redirects are stored without it
+    // Rendered HTML links have the /en prefix, but redirects are stored without it.
     const result = checkInternalLink(
       '/en/enterprise-server@3.19/actions/old-path',
       pageMap,
@@ -503,9 +500,143 @@ describe('checkInternalLink', () => {
     expect(result.redirectTarget).toBe('/actions/current-path')
   })
 
+  describe('version-aware resolution', () => {
+    // Non-FPT links need source-version context; the redirect fallback otherwise misreports them.
+    const versionedPageMap = {
+      '/en/enterprise-server@3.21/billing/set-up-payment': {} as unknown as Page,
+      '/en/actions/fpt-only': {} as unknown as Page,
+    }
+    const versionedRedirects = {
+      '/billing/set-up-payment': '/enterprise-cloud@latest/billing/set-up-payment',
+    }
+
+    test('reports a redirect when no version is supplied (the old behavior)', () => {
+      const result = checkInternalLink(
+        '/billing/set-up-payment',
+        versionedPageMap,
+        versionedRedirects,
+      )
+      expect(result.isRedirect).toBe(true)
+    })
+
+    test('resolves a versionless link inside the version being checked', () => {
+      const result = checkInternalLink(
+        '/billing/set-up-payment',
+        versionedPageMap,
+        versionedRedirects,
+        'enterprise-server@3.21',
+      )
+      expect(result.exists).toBe(true)
+      expect(result.isRedirect).toBe(false)
+    })
+
+    test('omits the version segment for FPT, matching permalink construction', () => {
+      const result = checkInternalLink(
+        '/actions/fpt-only',
+        versionedPageMap,
+        versionedRedirects,
+        'free-pro-team@latest',
+      )
+      expect(result.exists).toBe(true)
+      expect(result.isRedirect).toBe(false)
+    })
+
+    test('does not reinterpret a link that already names a version', () => {
+      const result = checkInternalLink(
+        '/enterprise-cloud@latest/billing/set-up-payment',
+        versionedPageMap,
+        versionedRedirects,
+        'enterprise-server@3.21',
+      )
+      expect(result.exists).toBe(false)
+    })
+
+    test('does not reinterpret a link that already names a language', () => {
+      const result = checkInternalLink(
+        '/en/actions/fpt-only',
+        versionedPageMap,
+        versionedRedirects,
+        'enterprise-server@3.21',
+      )
+      expect(result.exists).toBe(true)
+      expect(result.isRedirect).toBe(false)
+    })
+
+    test('still reports a genuinely broken link', () => {
+      const result = checkInternalLink(
+        '/billing/no-such-page',
+        versionedPageMap,
+        versionedRedirects,
+        'enterprise-server@3.21',
+      )
+      expect(result.exists).toBe(false)
+    })
+
+    test('still reports a genuine rename redirect', () => {
+      const result = checkInternalLink('/old-path', pageMap, redirects, 'free-pro-team@latest')
+      expect(result.exists).toBe(true)
+      expect(result.isRedirect).toBe(true)
+      expect(result.redirectTarget).toBe('/en/new-path')
+    })
+
+    test('respects a non-English language when building the key', () => {
+      const result = checkInternalLink(
+        '/billing/set-up-payment',
+        { '/ja/enterprise-server@3.21/billing/set-up-payment': {} as unknown as Page },
+        versionedRedirects,
+        'enterprise-server@3.21',
+        'ja',
+      )
+      expect(result.exists).toBe(true)
+      expect(result.isRedirect).toBe(false)
+    })
+
+    test('a redirect on the effective versioned URL wins over the page', () => {
+      // The redirect middleware runs before a page is served, so mirror that order.
+      const result = checkInternalLink(
+        '/billing/set-up-payment',
+        versionedPageMap,
+        {
+          '/enterprise-server@3.21/billing/set-up-payment':
+            '/enterprise-server@3.21/billing/renamed',
+        },
+        'enterprise-server@3.21',
+      )
+      expect(result.isRedirect).toBe(true)
+      expect(result.redirectTarget).toBe('/enterprise-server@3.21/billing/renamed')
+    })
+
+    test('ignores a self-redirect on the effective versioned URL', () => {
+      const result = checkInternalLink(
+        '/billing/set-up-payment',
+        versionedPageMap,
+        {
+          '/enterprise-server@3.21/billing/set-up-payment':
+            '/enterprise-server@3.21/billing/set-up-payment',
+        },
+        'enterprise-server@3.21',
+      )
+      expect(result.exists).toBe(true)
+      expect(result.isRedirect).toBe(false)
+    })
+
+    test('resolveInternalLinkKey finds the versioned key so fragments get checked', () => {
+      expect(
+        resolveInternalLinkKey(
+          '/billing/set-up-payment',
+          versionedPageMap,
+          'enterprise-server@3.21',
+        ),
+      ).toBe('/en/enterprise-server@3.21/billing/set-up-payment')
+    })
+
+    test('resolveInternalLinkKey still returns null without a version', () => {
+      expect(resolveInternalLinkKey('/billing/set-up-payment', versionedPageMap)).toBe(null)
+    })
+  })
+
   test('treats archived Enterprise Server versions as valid', () => {
-    // Deprecated GHES versions are served by the archived enterprise versions
-    // system, which isn't loaded into pageMap. They must not be reported broken.
+    // Archived Enterprise Server versions are valid even when pageMap does not load them.
     const result = checkInternalLink(
       '/enterprise-server@3.7/admin/release-notes',
       pageMap,
@@ -526,8 +657,7 @@ describe('checkInternalLink', () => {
   })
 
   test('resolves free-pro-team@latest prefixed links via the redirect resolver', () => {
-    // The flat redirects map has no literal key for this; getRedirect computes
-    // the correction (strip the version prefix) the same way production does.
+    // getRedirect strips the version prefix because the flat redirects map has no literal key.
     const result = checkInternalLink('/free-pro-team@latest/actions/guides', pageMap, redirects)
     expect(result.exists).toBe(true)
     expect(result.isRedirect).toBe(true)
@@ -538,13 +668,11 @@ describe('checkInternalLink', () => {
     const result = checkInternalLink(`/enterprise-server/admin/overview`, pageMap, redirects)
     expect(result.exists).toBe(true)
     expect(result.isRedirect).toBe(true)
-    // Normalized to the latest stable Enterprise Server version.
     expect(result.redirectTarget).toBe(`/enterprise-server@${latestStable}/admin/overview`)
   })
 
   test('strips hyphenated locale prefixes without double-prefixing', () => {
-    // /pt-br/ is a hyphenated locale; it must be stripped (not turned into
-    // /en/pt-br/...) so the underlying path resolves against the redirects map.
+    // Hyphenated locales such as /pt-br/ must strip cleanly before redirect lookup.
     const result = checkInternalLink('/pt-br/actions/legacy-path', pageMap, redirects)
     expect(result.exists).toBe(true)
     expect(result.isRedirect).toBe(true)
@@ -552,12 +680,45 @@ describe('checkInternalLink', () => {
   })
 
   test('normalizes a bare language-root redirect target to /', () => {
-    // getRedirect collapses '/free-pro-team@latest' to the language root ('/en');
-    // after stripping the locale that would be empty, so it must normalize to '/'.
+    // getRedirect collapses /free-pro-team@latest to /en, which strips to empty.
     const result = checkInternalLink('/free-pro-team@latest', pageMap, redirects)
     expect(result.exists).toBe(true)
     expect(result.isRedirect).toBe(true)
     expect(result.redirectTarget).toBe('/')
+  })
+})
+
+describe('resolveInternalLinkKey', () => {
+  const pageMap = {
+    '/en/actions/getting-started': {} as unknown as Page,
+    '/actions/guides': {} as unknown as Page,
+    [`/en/enterprise-server@${latestStable}/admin/overview`]: {} as unknown as Page,
+  }
+
+  test('resolves a direct pageMap key', () => {
+    expect(resolveInternalLinkKey('/actions/guides', pageMap)).toBe('/actions/guides')
+  })
+
+  test('resolves a language-prefixed page from a bare path', () => {
+    expect(resolveInternalLinkKey('/actions/getting-started', pageMap)).toBe(
+      '/en/actions/getting-started',
+    )
+  })
+
+  test('ignores query strings and fragments when resolving', () => {
+    expect(resolveInternalLinkKey('/actions/guides?foo=1#some-anchor', pageMap)).toBe(
+      '/actions/guides',
+    )
+  })
+
+  test('normalizes enterprise-server@latest to the latest stable release', () => {
+    expect(resolveInternalLinkKey('/enterprise-server@latest/admin/overview', pageMap)).toBe(
+      `/en/enterprise-server@${latestStable}/admin/overview`,
+    )
+  })
+
+  test('returns null when the path does not resolve directly to a page', () => {
+    expect(resolveInternalLinkKey('/does/not/exist', pageMap)).toBeNull()
   })
 })
 
@@ -576,7 +737,6 @@ describe('isAssetLink', () => {
 
 describe('checkAssetLink', () => {
   test('returns true for existing asset files', () => {
-    // Use a known existing asset file
     expect(checkAssetLink('/assets/images/help/writing/headings-rendered.png')).toBe(true)
   })
 
@@ -586,5 +746,82 @@ describe('checkAssetLink', () => {
 
   test('returns false for non-asset paths', () => {
     expect(checkAssetLink('/actions/getting-started')).toBe(false)
+  })
+})
+
+describe('checkInternalLink version-only redirects', () => {
+  const pageMap = {
+    '/en/enterprise-server@3.21/admin/other': {} as unknown as Page,
+  }
+
+  test('flags a redirect that only exists under the version prefix', () => {
+    const redirects = {
+      '/enterprise-server@3.21/admin/old': '/enterprise-server@3.21/admin/other',
+    }
+    const result = checkInternalLink('/admin/old', pageMap, redirects, 'enterprise-server@3.21')
+    expect(result.isRedirect).toBe(true)
+    expect(result.requiresVersionContext).toBe(true)
+  })
+
+  test('does not flag it when the versionless form redirects too', () => {
+    const redirects = {
+      '/enterprise-server@3.21/admin/old': '/enterprise-server@3.21/admin/other',
+      '/admin/old': '/admin/other',
+    }
+    const result = checkInternalLink('/admin/old', pageMap, redirects, 'enterprise-server@3.21')
+    expect(result.isRedirect).toBe(true)
+    expect(result.requiresVersionContext).toBe(false)
+  })
+})
+
+describe('resolveInternalLinkKey version precedence', () => {
+  // Both keys exist because the target page applies to FPT and to GHES.
+  const pageMap = {
+    '/en/get-started/shared': {} as unknown as Page,
+    '/en/enterprise-server@3.21/get-started/shared': {} as unknown as Page,
+  }
+
+  test('resolves to the version being checked, not the versionless key', () => {
+    expect(resolveInternalLinkKey('/get-started/shared', pageMap, 'enterprise-server@3.21')).toBe(
+      '/en/enterprise-server@3.21/get-started/shared',
+    )
+  })
+
+  test('resolves to the versionless key on FPT', () => {
+    expect(resolveInternalLinkKey('/get-started/shared', pageMap, 'free-pro-team@latest')).toBe(
+      '/en/get-started/shared',
+    )
+  })
+
+  test('falls back to the versionless key when the version has no page', () => {
+    expect(resolveInternalLinkKey('/get-started/shared', pageMap, 'enterprise-server@3.17')).toBe(
+      '/en/get-started/shared',
+    )
+  })
+})
+
+describe('extractLinksWithLiquid with createLiquidContext', () => {
+  const fptFeatures = getFeaturesByVersion('free-pro-team@latest')
+  const fptFeature = Object.keys(fptFeatures).find((name) => fptFeatures[name])
+
+  test('renders version short names and feature flags for the version', async () => {
+    expect(fptFeature).toBeDefined()
+    const content = `
+{% ifversion fpt %}[a](/x/fpt){% endif %}
+{% ifversion fpt or ghec %}[b](/x/b){% else %}[c](/x/c){% endif %}
+{% ifversion ${fptFeature} %}[d](/x/feature){% endif %}
+`
+    const result = await extractLinksWithLiquid(content, createLiquidContext())
+    const hrefs = result.internalLinks.map((link) => link.href)
+
+    expect(hrefs).toEqual(['/x/fpt', '/x/b', '/x/feature'])
+  })
+
+  test('renders the matching branch for GHES', async () => {
+    const content = `{% ifversion ghes %}[a](/x/ghes){% else %}[b](/x/other){% endif %}`
+    const context = createLiquidContext(`enterprise-server@${latestStable}`)
+    const result = await extractLinksWithLiquid(content, context)
+
+    expect(result.internalLinks.map((link) => link.href)).toEqual(['/x/ghes'])
   })
 })

@@ -10,7 +10,6 @@ import { TitleFromAutotitleError } from '@/content-render/unified/rewrite-local-
 import Page from '@/frame/lib/page'
 
 describe('Translation Error Comments', () => {
-  // Mock renderContent for integration tests
   let mockRenderContent: MockedFunction<
     (template: string, context: Record<string, unknown>) => string
   >
@@ -114,7 +113,7 @@ describe('Translation Error Comments', () => {
         expect(result).toContain(
           'msg="Could not find target page for [AUTOTITLE] link to invalid-link"',
         )
-        // Should not contain file/line/col since AUTOTITLE errors don't have tokens
+        // AUTOTITLE errors do not expose token file, line, or col data.
         expect(result).not.toContain('file=')
         expect(result).not.toContain('line=')
         expect(result).not.toContain('col=')
@@ -144,7 +143,7 @@ describe('Translation Error Comments', () => {
         expect(result).toContain('prop=rawIntro')
         expect(result).toContain('type=RenderError')
         expect(result).toContain('msg="Generic liquid error without token info"')
-        // Should not contain file/line/col since no token
+        // Errors without tokens do not expose file, line, or col data.
         expect(result).not.toContain('file=')
         expect(result).not.toContain('line=')
         expect(result).not.toContain('col=')
@@ -179,7 +178,7 @@ describe('Translation Error Comments', () => {
       })
 
       test('truncates very long error messages', () => {
-        const longMessage = 'A'.repeat(300) // Very long error message
+        const longMessage = 'A'.repeat(300)
         const error = new LiquidError(longMessage, 'ParseError')
 
         const result = createTranslationFallbackComment(error, 'rawTitle')
@@ -187,7 +186,6 @@ describe('Translation Error Comments', () => {
         expect(result).toContain('msg="')
         expect(result).toContain('...')
 
-        // Extract the message part to verify truncation
         const msgMatch = result.match(/msg="([^"]*)"/)
         expect(msgMatch).toBeTruthy()
         if (msgMatch?.[1]) {
@@ -206,13 +204,13 @@ describe('Translation Error Comments', () => {
 
       test('handles error with unknown type', () => {
         const error = new Error('Some error')
-        // No name property (will default to 'Error')
+        // Plain Error uses its inherited name as the fallback comment type.
 
         const result = createTranslationFallbackComment(error, 'content')
 
         expect(result).toContain('type=Error')
         expect(result).toContain('prop=content')
-        // Non-liquid errors without specific handling don't get messages
+        // Non-liquid errors without specific handling omit messages.
         expect(result).not.toContain('msg=')
       })
 
@@ -223,7 +221,6 @@ describe('Translation Error Comments', () => {
 
         expect(result).toContain('type=ParseError')
         expect(result).toContain('prop=title')
-        // Should handle gracefully, might not have msg or have empty msg
       })
 
       test('cleans up multiline messages', () => {
@@ -246,11 +243,9 @@ describe('Translation Error Comments', () => {
 
         const result = createTranslationFallbackComment(error, 'rawTitle')
 
-        // Should be a proper HTML comment
         expect(result.startsWith('<!-- TRANSLATION_FALLBACK')).toBe(true)
         expect(result.endsWith('-->')).toBe(true)
 
-        // Should be on a single line
         expect(result).not.toContain('\n')
       })
 
@@ -281,7 +276,6 @@ describe('Translation Error Comments', () => {
 
         const result = createTranslationFallbackComment(error, 'title')
 
-        // Should follow the expected structure with all required fields
         expect(result.startsWith('<!-- TRANSLATION_FALLBACK')).toBe(true)
         expect(result).toContain('prop=title')
         expect(result).toContain('type=ParseError')
@@ -297,7 +291,7 @@ describe('Translation Error Comments', () => {
   describe('Integration Tests', () => {
     describe('renderContentWithFallback', () => {
       test('adds HTML comment when translation fails and fallback succeeds', async () => {
-        // Mock a simple page object that satisfies instanceof Page check
+        // Page.prototype makes the mock satisfy instanceof Page.
         const mockPage = Object.create(Page.prototype)
         mockPage.rawTitle = '{% badtag %}'
 
@@ -310,7 +304,7 @@ describe('Translation Error Comments', () => {
           },
         }
 
-        // Mock renderContent to simulate error for Japanese, success for English
+        // Japanese rendering fails and English rendering succeeds, so fallback runs.
         mockRenderContent.mockImplementation(
           (template: string, innerContext: Record<string, unknown>) => {
             if (innerContext.currentLanguage !== 'en' && template.includes('badtag')) {
@@ -365,6 +359,71 @@ describe('Translation Error Comments', () => {
 
         expect(result).not.toContain('<!-- TRANSLATION_FALLBACK')
         expect(result).toBe('English Title')
+      })
+
+      describe('when rendering a page other than the request page', () => {
+        const makePage = (languageCode: string, href: string, props: Record<string, string>) => {
+          const page = Object.create(Page.prototype)
+          Object.assign(page, props, { languageCode, permalinks: [{ href }] })
+          return page
+        }
+
+        const setup = () => {
+          const enA = makePage('en', '/en/a', { rawTitle: 'A en', rawIntro: 'Intro A en' })
+          const enB = makePage('en', '/en/b', { rawTitle: 'B en', rawIntro: 'Intro B en' })
+          const jaA = makePage('ja', '/ja/a', { rawTitle: '{% badtag %}', rawIntro: 'Intro A ja' })
+          const jaB = makePage('ja', '/ja/b', {
+            rawTitle: '{% badtag %}',
+            rawIntro: '{% badtag %}',
+          })
+          const jaC = makePage('ja', '/ja/c', { rawTitle: '{% badtag %}' })
+          const context = {
+            currentLanguage: 'ja',
+            page: jaA,
+            pages: { '/en/a': enA, '/en/b': enB, '/ja/a': jaA, '/ja/b': jaB, '/ja/c': jaC },
+            getEnglishPage: vi.fn(() => enA),
+          }
+          return { jaA, jaB, jaC, context }
+        }
+
+        test('falls back to the English title of the rendered page', async () => {
+          const { jaB, context } = setup()
+
+          const result = await renderContentWithFallback(jaB, 'rawTitle', context, {
+            textOnly: true,
+          })
+
+          expect(result).toBe('B en')
+        })
+
+        test('falls back to the English intro of the rendered page', async () => {
+          const { jaB, context } = setup()
+
+          const result = await renderContentWithFallback(jaB, 'rawIntro', context)
+
+          expect(result).toContain('<!-- TRANSLATION_FALLBACK')
+          expect(result).toContain('Intro B en')
+          expect(result).not.toContain('Intro A en')
+        })
+
+        test('uses getEnglishPage for the request page', async () => {
+          const { jaA, context } = setup()
+
+          const result = await renderContentWithFallback(jaA, 'rawTitle', context, {
+            textOnly: true,
+          })
+
+          expect(context.getEnglishPage).toHaveBeenCalledWith(context)
+          expect(result).toBe('A en')
+        })
+
+        test('rethrows when the rendered page has no English counterpart', async () => {
+          const { jaC, context } = setup()
+
+          await expect(
+            renderContentWithFallback(jaC, 'rawTitle', context, { textOnly: true }),
+          ).rejects.toMatchObject({ name: 'ParseError' })
+        })
       })
     })
 

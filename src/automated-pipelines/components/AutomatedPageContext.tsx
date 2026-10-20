@@ -31,6 +31,12 @@ export const useAutomatedPageContext = (): AutomatedPageContextT => {
   return context
 }
 
+// Returns null outside a provider, so shared navigation can call the hook on REST
+// reference and conceptual pages.
+export const useAutomatedPageContextOptional = (): AutomatedPageContextT | null => {
+  return useContext(AutomatedPageContext)
+}
+
 type AutomatedPageContextRequest = { context?: Partial<Context> } | IncomingMessage
 
 type AutomatedPage = {

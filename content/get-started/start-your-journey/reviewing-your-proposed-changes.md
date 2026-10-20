@@ -2,13 +2,13 @@
 title: 'Reviewing your proposed changes'
 shortTitle: 'Review changes'
 intro: 'Review your own pull request before you merge to catch bugs and improve quality, with an optional AI assist from {% data variables.product.prodname_copilot_short %}.'
-category:
-  - Learn to code
-contentType: get-started
 versions:
   fpt: '*'
   ghes: '*'
   ghec: '*'
+category:
+  - Start your GitHub journey
+contentType: get-started
 ---
 
 A pull request is a chance to look at your work with fresh eyes before it becomes part of `main`. In this tutorial, you'll review your own changes, apply improvements, and merge the first feature for your website.
@@ -51,7 +51,7 @@ You can also ask {% data variables.copilot.copilot_chat_short %} in your editor 
 > [!TIP]
 > If you enjoyed using {% data variables.product.prodname_copilot_short %} to review your own code, you can [sign up for a paid plan](https://github.com/github-copilot/signup?ref_product=copilot&ref_type=purchase&ref_style=text&ref_plan=pro) to get additional AI credits and {% data variables.copilot.copilot_code-review_short %}, which can review your pull requests automatically when you add {% data variables.product.prodname_copilot_short %} as a reviewer.
 >
-> For more information, see [AUTOTITLE]({% ifversion ghes %}/enterprise-cloud@latest{% endif %}/copilot/how-tos/set-up/set-up-for-self) and [AUTOTITLE]({% ifversion ghes %}/enterprise-cloud@latest{% endif %}/copilot/concepts/agents/code-review){% ifversion ghes %} in the {% data variables.product.prodname_ghe_cloud %} documentation{% endif %}.
+> For more information, see [AUTOTITLE]({% ifversion ghes %}/enterprise-cloud@latest{% endif %}/copilot/get-started/plans) and [AUTOTITLE]({% ifversion ghes %}/enterprise-cloud@latest{% endif %}/copilot/concepts/agents/code-review){% ifversion ghes %} in the {% data variables.product.prodname_ghe_cloud %} documentation{% endif %}.
 
 ## Applying feedback
 

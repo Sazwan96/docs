@@ -8,6 +8,8 @@ intro: >-
 versions:
   fpt: '*'
   ghec: '*'
+redirect_from:
+  - /copilot/how-tos/copilot-sdk/set-up-copilot-sdk/scaling
 contentType: how-tos
 ---
 
@@ -442,7 +444,7 @@ volumes:
 | **No built-in session locking** | Implement application-level locking for concurrent access |
 | **No built-in load balancing** | Use external LB or service mesh |
 | **Session state is file-based** | Requires shared filesystem for multi-server setups |
-| **30-minute idle timeout** | Sessions without activity are auto-cleaned by the CLI |
+| **No idle timeout by default** | Pass `--session-idle-timeout <seconds>` to the CLI server to automatically clean up inactive sessions |
 | **CLI is single-process** | Scale by adding more CLI server instances, not threads |
 
 ## Next steps

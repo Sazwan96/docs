@@ -5,23 +5,14 @@ intro: Learn the core concepts that you'll need to understand {% data variables.
 versions:
   feature: copilot
 children:
-  - /completions
-  - /chat
+  - /copilot-surfaces
   - /agents
-  - /about-cloud-and-local-sandboxes
-  - /spark
-  - /copilot-usage-metrics
-  - /prompting
+  - /agent-capabilities
+  - /prompting-and-context
   - /context
-  - /tools
   - /models
-  - /usage-limits
-  - /billing
-  - /about-enterprise-accounts-for-copilot-business
-  - /policies
-  - /mcp-management
-  - /network-settings
-  - /preparing-for-new-features-and-models
+  - /billing-and-usage
+  - /security-governance-and-network-settings
+  - /enterprise
 contentType: concepts
 ---
-

@@ -5,20 +5,15 @@ const fetchWithRetry = vi.fn()
 vi.mock('@/frame/lib/fetch-utils', () => ({
   fetchWithRetry: (...args: unknown[]) => fetchWithRetry(...args),
 }))
-// warmServer is only used by the entry point, not the exported helpers under
-// test, but importing the module pulls it in, so stub it to stay light.
-vi.mock('@/frame/lib/warm-server', () => ({ default: vi.fn() }))
 
 const {
   resolvePreviousProductionSha,
   getChangedContentFiles,
-  contentFilesToEnglishUrls,
-  hardPurgeUrls,
+  contentFilesToPageKeys,
+  chunk,
+  purgeSurrogateKeys,
   rateLimitDelayMs,
-  PURGEABLE_PAGE_VERSIONS,
 } = await import('../purge-fastly-changed-content')
-
-const { latest: latestGhes } = await import('@/versions/lib/enterprise-server-releases')
 
 afterEach(() => {
   vi.clearAllMocks()
@@ -123,54 +118,45 @@ describe('getChangedContentFiles', () => {
   })
 })
 
-describe('contentFilesToEnglishUrls', () => {
-  test('maps content paths to full prod URLs across versions and dedupes', () => {
-    const permalinks: Record<string, string[]> = {
-      'get-started/foo.md': ['/en/get-started/foo', '/en/enterprise-server@3.14/get-started/foo'],
-      'get-started/bar.md': ['/en/get-started/bar'],
-    }
-    const urls = contentFilesToEnglishUrls(
-      [
-        { filename: 'content/get-started/foo.md', status: 'modified' },
-        { filename: 'content/get-started/bar.md', status: 'added' },
-        { filename: 'content/get-started/foo.md', status: 'modified' },
-      ],
-      (relativePath) => permalinks[relativePath] || [],
-    )
-    expect(urls).toEqual([
-      'https://docs.github.com/en/get-started/foo',
-      'https://docs.github.com/en/enterprise-server@3.14/get-started/foo',
-      'https://docs.github.com/en/get-started/bar',
+describe('contentFilesToPageKeys', () => {
+  test('maps content files to one deduped English page key each', () => {
+    const keys = contentFilesToPageKeys([
+      { filename: 'content/get-started/foo.md', status: 'modified' },
+      { filename: 'content/get-started/bar.md', status: 'added' },
+      { filename: 'content/get-started/foo.md', status: 'modified' },
+    ])
+    // One surrogate key covers every version URL for a source page.
+    expect(keys).toEqual([
+      'language:en,path:get-started/foo.md',
+      'language:en,path:get-started/bar.md',
     ])
   })
 
-  test('skips files that resolve to no permalinks', () => {
-    const urls = contentFilesToEnglishUrls(
-      [{ filename: 'content/unknown/page.md', status: 'modified' }],
-      () => [],
-    )
-    expect(urls).toEqual([])
+  test('honors an explicit language', () => {
+    expect(
+      contentFilesToPageKeys([{ filename: 'content/x/y.md', status: 'modified' }], 'ja'),
+    ).toEqual(['language:ja,path:x/y.md'])
+  })
+
+  test('returns an empty list for no files', () => {
+    expect(contentFilesToPageKeys([])).toEqual([])
   })
 })
 
-describe('PURGEABLE_PAGE_VERSIONS', () => {
-  test('is only the latest release of each plan (fpt, ghec, latest ghes)', () => {
-    expect([...PURGEABLE_PAGE_VERSIONS].sort()).toEqual(
-      ['free-pro-team@latest', 'enterprise-cloud@latest', `enterprise-server@${latestGhes}`].sort(),
-    )
+describe('chunk', () => {
+  test('splits into batches of at most the given size', () => {
+    expect(chunk([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]])
   })
 
-  test('excludes older, still-supported GHES releases', () => {
-    for (const version of PURGEABLE_PAGE_VERSIONS) {
-      if (version.startsWith('enterprise-server@')) {
-        expect(version).toBe(`enterprise-server@${latestGhes}`)
-      }
-    }
+  test('returns no batches for an empty list', () => {
+    expect(chunk([], 256)).toEqual([])
   })
 })
 
-describe('hardPurgeUrls', () => {
-  // A minimal stand-in for a fetch Response, with a case-insensitive headers.get.
+describe('purgeSurrogateKeys', () => {
+  // Tests skip the 20-second between-pass delay.
+  const noSleep = async () => {}
+
   function fakeResponse(
     status: number,
     { headers = {}, ok = false }: { headers?: Record<string, string>; ok?: boolean } = {},
@@ -186,65 +172,110 @@ describe('hardPurgeUrls', () => {
     }
   }
 
-  test('issues a hard URL purge per URL (no soft-purge header)', async () => {
+  test('sends one hard batch purge per pass with a surrogate_keys body (no soft header)', async () => {
     fetchWithRetry.mockResolvedValue({ ok: true })
-    await hardPurgeUrls(
-      ['https://docs.github.com/en/foo', 'https://docs.github.com/en/bar'],
+    await purgeSurrogateKeys(
+      ['language:en,path:a.md', 'language:en,path:b.md'],
       'token-123',
-      2,
+      'svc-1',
+      { sleepFn: noSleep },
     )
     expect(fetchWithRetry).toHaveBeenCalledTimes(2)
     const [url, init] = fetchWithRetry.mock.calls[0]
-    expect(url).toBe('https://api.fastly.com/purge/docs.github.com/en/foo')
+    expect(url).toBe('https://api.fastly.com/service/svc-1/purge')
     expect(init.method).toBe('POST')
     expect(init.headers['fastly-key']).toBe('token-123')
     expect(init.headers['fastly-soft-purge']).toBeUndefined()
+    expect(JSON.parse(init.body)).toEqual({
+      surrogate_keys: ['language:en,path:a.md', 'language:en,path:b.md'],
+    })
+    expect(fetchWithRetry.mock.calls[1][1].body).toBe(init.body)
   })
 
-  test('throws if any purge fails, after attempting all of them', async () => {
+  test('sends the soft-purge header when soft is set', async () => {
+    fetchWithRetry.mockResolvedValue({ ok: true })
+    await purgeSurrogateKeys(['language:en'], 'tok', 'svc', { soft: true, sleepFn: noSleep })
+    expect(fetchWithRetry).toHaveBeenCalledTimes(2)
+    for (const [, init] of fetchWithRetry.mock.calls) {
+      expect(init.headers['fastly-soft-purge']).toBe('1')
+    }
+  })
+
+  test('waits between the two passes to let the shield re-populate first', async () => {
+    fetchWithRetry.mockResolvedValue({ ok: true })
+    const waits: number[] = []
+    await purgeSurrogateKeys(['language:en,path:a.md'], 'tok', 'svc', {
+      sleepFn: async (ms: number) => {
+        waits.push(ms)
+      },
+    })
+    expect(waits).toEqual([20_000])
+  })
+
+  test('splits more than 256 keys into multiple batches, per pass', async () => {
+    fetchWithRetry.mockResolvedValue({ ok: true })
+    const keys = Array.from({ length: 257 }, (_unused, i) => `language:en,path:p${i}.md`)
+    await purgeSurrogateKeys(keys, 'tok', 'svc', { sleepFn: noSleep })
+    // 2 batches x 2 passes.
+    expect(fetchWithRetry).toHaveBeenCalledTimes(4)
+    expect(JSON.parse(fetchWithRetry.mock.calls[0][1].body).surrogate_keys).toHaveLength(256)
+    expect(JSON.parse(fetchWithRetry.mock.calls[1][1].body).surrogate_keys).toHaveLength(1)
+    expect(JSON.parse(fetchWithRetry.mock.calls[2][1].body).surrogate_keys).toHaveLength(256)
+    expect(JSON.parse(fetchWithRetry.mock.calls[3][1].body).surrogate_keys).toHaveLength(1)
+  })
+
+  test('throws if any batch fails, after attempting all of them in both passes', async () => {
     fetchWithRetry.mockResolvedValueOnce({ ok: true }).mockResolvedValueOnce({
       ok: false,
       status: 500,
       statusText: 'err',
       text: async () => 'boom',
     })
+    fetchWithRetry.mockResolvedValue({ ok: true })
+    const keys = Array.from({ length: 300 }, (_unused, i) => `language:en,path:p${i}.md`)
+    await expect(purgeSurrogateKeys(keys, 'tok', 'svc', { sleepFn: noSleep })).rejects.toThrow(
+      /1 of 4 batch purge\(s\) failed/,
+    )
+    expect(fetchWithRetry).toHaveBeenCalledTimes(4)
+  })
+
+  test('still runs the second pass when the first one fails outright', async () => {
+    fetchWithRetry
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'err',
+        text: async () => 'boom',
+      })
+      .mockResolvedValue({ ok: true })
     await expect(
-      hardPurgeUrls(['https://docs.github.com/en/foo', 'https://docs.github.com/en/bar'], 'tok', 1),
-    ).rejects.toThrow(/1 of 2 URL purge\(s\) failed/)
+      purgeSurrogateKeys(['language:en,path:a.md'], 'tok', 'svc', { sleepFn: noSleep }),
+    ).rejects.toThrow(/1 of 2 batch purge\(s\) failed/)
     expect(fetchWithRetry).toHaveBeenCalledTimes(2)
   })
 
   test('retries a 429, honoring the hint, then succeeds', async () => {
     fetchWithRetry
       .mockResolvedValueOnce(fakeResponse(429, { headers: { 'retry-after': '0' } }))
-      .mockResolvedValueOnce(fakeResponse(200, { ok: true }))
-    await hardPurgeUrls(['https://docs.github.com/en/foo'], 'tok', 1, 0, undefined, () => 0)
-    expect(fetchWithRetry).toHaveBeenCalledTimes(2)
+      .mockResolvedValue(fakeResponse(200, { ok: true }))
+    await purgeSurrogateKeys(['language:en,path:a.md'], 'tok', 'svc', {
+      rateLimitDelayFn: () => 0,
+      sleepFn: noSleep,
+    })
+    // The first pass gets a 429 and retries once; the second pass makes one call.
+    expect(fetchWithRetry).toHaveBeenCalledTimes(3)
   })
 
-  test('gives up after the retry budget and reports the URL as failed', async () => {
+  test('gives up after the retry budget and reports the batch as failed', async () => {
     fetchWithRetry.mockResolvedValue(fakeResponse(429, { headers: { 'retry-after': '0' } }))
     await expect(
-      hardPurgeUrls(['https://docs.github.com/en/foo'], 'tok', 1, 0, undefined, () => 0),
-    ).rejects.toThrow(/1 of 1 URL purge\(s\) failed/)
-    // Initial attempt + 5 retries.
-    expect(fetchWithRetry).toHaveBeenCalledTimes(6)
-  })
-
-  test('stops starting purges once the time budget is exceeded', async () => {
-    fetchWithRetry.mockResolvedValue(fakeResponse(200, { ok: true }))
-    // Budget below zero: the deadline is already in the past on the first loop
-    // check, so no purge is attempted and every URL is reported as skipped.
-    await expect(
-      hardPurgeUrls(
-        ['https://docs.github.com/en/foo', 'https://docs.github.com/en/bar'],
-        'tok',
-        1,
-        0,
-        -1,
-      ),
-    ).rejects.toThrow(/2 of 2 URL purge\(s\) failed/)
-    expect(fetchWithRetry).not.toHaveBeenCalled()
+      purgeSurrogateKeys(['language:en,path:a.md'], 'tok', 'svc', {
+        rateLimitDelayFn: () => 0,
+        sleepFn: noSleep,
+      }),
+    ).rejects.toThrow(/2 of 2 batch purge\(s\) failed/)
+    // Initial attempt plus 5 retries, times 2 passes.
+    expect(fetchWithRetry).toHaveBeenCalledTimes(12)
   })
 })
 
@@ -286,8 +317,7 @@ describe('rateLimitDelayMs', () => {
   })
 
   test('adds jitter on top of a server hint to decorrelate workers', () => {
-    // Math.random -> 0.5 gives jitter = floor(0.5 * 150) = 75ms, added on top of
-    // the honored 5000ms hint so concurrent workers don't wake in lockstep.
+    // Math.random of 0.5 adds 75 ms to the 5000 ms hint, so retries do not wake together.
     vi.spyOn(Math, 'random').mockReturnValue(0.5)
     expect(rateLimitDelayMs(fakeResponse({ 'retry-after': '5' }), 0)).toBe(5075)
   })
@@ -300,19 +330,18 @@ describe('rateLimitDelayMs', () => {
 
   test('clamps any delay to the maximum', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0)
-    // 1000 * (40 + 1) would be 41,000ms; clamped to 30,000.
+    // 1000 * (40 + 1) would be 41,000 ms, so the 30,000 ms cap applies.
     expect(rateLimitDelayMs(fakeResponse({}), 40)).toBe(30_000)
-    // A far-future server hint is likewise capped.
+    // The 30,000 ms cap also applies to far-future server hints.
     expect(rateLimitDelayMs(fakeResponse({ 'retry-after': '99999' }), 0)).toBe(30_000)
   })
 
   test('floors a stale or zero hint at the backoff instead of retrying instantly', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0)
-    // A negative Retry-After and an already-elapsed reset both compute to <= 0,
-    // but must not collapse the retry to 0ms; they floor at the backoff.
+    // Negative Retry-After and elapsed reset hints floor at backoff, so retries never hit 0 ms.
     expect(rateLimitDelayMs(fakeResponse({ 'retry-after': '-5' }), 0)).toBe(1000)
     expect(rateLimitDelayMs(fakeResponse({ 'fastly-ratelimit-reset': '1' }), 0)).toBe(1000)
-    // The floor grows with the attempt count, same as a hintless backoff.
+    // Hint floors use the same attempt-based backoff as missing hints.
     expect(rateLimitDelayMs(fakeResponse({ 'retry-after': '0' }), 2)).toBe(3000)
   })
 })

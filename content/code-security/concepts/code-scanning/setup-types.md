@@ -13,11 +13,23 @@ category:
 
 ## About default setup
 
-Default setup for {% data variables.product.prodname_code_scanning %} is the quickest, easiest, most low-maintenance way to enable {% data variables.product.prodname_code_scanning %} for your repository. Based on the code in your repository, default setup will automatically create a custom {% data variables.product.prodname_code_scanning %} configuration. After enabling default setup, the code written in {% data variables.product.prodname_codeql %}-supported languages in your repository will be scanned using {% data variables.product.prodname_codeql %}:
+Default setup for {% data variables.product.prodname_code_scanning %} is the quickest, easiest, most low-maintenance way to enable {% data variables.product.prodname_code_scanning %} for your repository. Based on the code in your repository, default setup will automatically create a custom {% data variables.product.prodname_code_scanning %} configuration. You can also customize this configuration, including at scale across your organization, without creating or maintaining a workflow file. See [Customization of default setup](#customization-of-default-setup).
 
+With default setup, the code written in {% data variables.product.prodname_codeql %}-supported languages in your repository will be scanned using {% data variables.product.prodname_codeql %}:
+
+* When you enable it.
 * On each push to the repository's default branch, or any protected branch. For more information on protected branches, see [AUTOTITLE](/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches).
 * When creating or committing to a pull request based against the repository's default branch, or any protected branch, excluding pull requests from forks.
-* On a weekly schedule.
+* On a weekly schedule{% ifversion code-scanning-scheduled-scan-activity %}, if a push or pull request has triggered a scan in the last 180 days{% endif %}.
+{%- ifversion code-scanning-inactive-repos %}
+* Every 30 days for inactive repositories, when enabled by an organization owner. See [AUTOTITLE](/code-security/how-tos/secure-at-scale/configure-organization-security/establish-complete-coverage/configure-global-settings#continuing-scans-on-inactive-repositories).
+{%- endif %}
+
+{% ifversion code-scanning-scheduled-scan-activity %}
+
+Weekly scheduled scans start only after a push or pull request triggers a scan with default setup enabled. The initial scan and scans triggered by configuration or language changes do not start or extend the weekly schedule. Pushes and pull requests from before default setup was enabled do not count.
+
+{% endif %}
 
 ### Supported languages
 
@@ -39,6 +51,12 @@ For existing configurations of default setup, you can edit:
 
 If your codebase depends on a library or framework that is not recognized by the standard libraries included with {% data variables.product.prodname_codeql %}, you can also extend the {% data variables.product.prodname_codeql %} coverage in default setup using {% data variables.product.prodname_codeql %} model packs. For more information, see [Extending CodeQL coverage with CodeQL model packs in default setup](/code-security/how-tos/find-and-fix-code-vulnerabilities/manage-your-configuration/edit-default-setup#extending-codeql-coverage-with-codeql-model-packs-in-default-setup).
 
+{% ifversion codeql-config-property %}
+
+You can also apply a custom {% data variables.product.prodname_codeql %} configuration file to default setup across your organization at once, or for a single repository, by setting the `github-codeql-config-file` repository property. {% data reusables.code-scanning.config-file-merged-with-default-setup %} This lets you meet customization needs that previously required advanced setup, while keeping the low-maintenance benefits of default setup. See [AUTOTITLE](/code-security/concepts/code-scanning/repository-properties#custom-configuration-files) and [AUTOTITLE](/code-security/how-tos/find-and-fix-code-vulnerabilities/manage-your-configuration/edit-default-setup#customizing-default-setup-with-a-configuration-file).
+
+{% endif %}
+
 {% ifversion codeql-custom-properties %}
 
 Additional configuration options that are shared between all {% data variables.product.prodname_code_scanning %} setup types are available. See [AUTOTITLE](/code-security/concepts/code-scanning/repository-properties).
@@ -59,7 +77,7 @@ Unless you have a specific use case, we recommend that you only assign runners w
 
 ## About advanced setup
 
-If you need more granular control over your {% data variables.product.prodname_code_scanning %} configuration, you should instead configure advanced setup. Advanced setup for {% data variables.product.prodname_code_scanning %} is helpful when you need to customize your {% data variables.product.prodname_code_scanning %}. You can set up {% data variables.product.prodname_code_scanning %} with {% data variables.product.prodname_actions %} or an external continuous integration or continuous delivery/deployment (CI/CD) system.
+{% ifversion codeql-config-property %}If the customization options available for default setup, including a custom configuration file, don't meet your needs{% else %}If you need more granular control over your {% data variables.product.prodname_code_scanning %} configuration{% endif %}, you should instead configure advanced setup. Advanced setup for {% data variables.product.prodname_code_scanning %} is helpful when you need to define your own {% data variables.product.prodname_actions %} workflow, for example to build compiled languages, use a matrix build, or change the analysis schedule. You can set up {% data variables.product.prodname_code_scanning %} with {% data variables.product.prodname_actions %} or an external continuous integration or continuous delivery/deployment (CI/CD) system.
 
 {% data reusables.code-scanning.about-multiple-configurations-link %}
 

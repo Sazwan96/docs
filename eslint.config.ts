@@ -188,7 +188,6 @@ export default [
   // Remove directories from this list as they are migrated
   {
     files: [
-      'src/ai-tools/**/*.{ts,js}',
       'src/article-api/**/*.{ts,js}',
       'src/audit-logs/**/*.{ts,js}',
       'src/color-schemes/**/*.{ts,js}',
@@ -196,7 +195,6 @@ export default [
       'src/events/components/**/*.{ts,js}',
       'src/fixtures/**/*.{ts,js}',
       'src/journeys/**/*.{ts,js}',
-      'src/metrics/**/*.{ts,js}',
       'src/observability/lib/handle-package-not-found.ts',
     ],
     rules: {
@@ -235,10 +233,10 @@ export default [
     },
   },
 
-  // Allow role="list" on list-style:none <ul> elements in these components.
+  // Allow role="list" on list-style:none <ul>/<ol> elements in these components.
   // Chromium drops the implicit `list`/`listitem` roles from the accessibility tree
   // when list-style:none is set, so NVDA/JAWS lose list semantics and the item count;
-  // role="list" on the <ul> and role="listitem" on each <li> restore them and are not
+  // role="list" on the <ul>/<ol> and role="listitem" on each <li> restore them and are not
   // actually redundant here. See github/accessibility-audits#16815.
   {
     files: [
@@ -248,11 +246,12 @@ export default [
       'src/frame/components/page-footer/LegalFooter.tsx',
       'src/landings/components/ProductSelectionCard.tsx',
       'src/release-notes/components/GHESReleaseNotes.tsx',
+      'src/landings/components/journey/JourneyLearningTracks.tsx',
     ],
     rules: {
       'jsx-a11y/no-redundant-roles': [
         'error',
-        { nav: ['navigation'], ul: ['list'], li: ['listitem'] },
+        { nav: ['navigation'], ul: ['list'], ol: ['list'], li: ['listitem'] },
       ],
     },
   },

@@ -1,10 +1,9 @@
 name: OS Ready for review
 
-# **What it does**: Adds pull requests and issues in the docs repository to the docs-content review board when the "waiting for review" label is added
-# **Why we have it**: So that contributors in the OS repo can easily get reviews from the docs-content team, and so that writers can see when a PR is ready for review
-# **Who does it impact**: Writers working in the docs repository
+# Public issues and PRs labeled waiting for review go to the docs-content review board
+# when a docs team member labels them.
 on:
-  # Needed in lieu of `pull_request` so that PRs from a fork can be triaged to the proper project board.
+  # pull_request_target lets forked PRs reach project-board triage.
   pull_request_target:
     types: [labeled]
   issues:
@@ -30,8 +29,10 @@ jobs:
           result-encoding: string
           script: |
             const triggerer_login = context.payload.sender.login
+            // Numeric org and team IDs survive team renames; org github is 9919.
+            // Team technical-content is 325922.
             const teamMembers = await github.request(
-              `/orgs/github/teams/docs/members?per_page=100`
+              `/organizations/9919/team/325922/members?per_page=100`
             )
             const logins = teamMembers.data.map(member => member.login)
             if (logins.includes(triggerer_login)) {
@@ -47,14 +48,8 @@ jobs:
           echo Aborting. This workflow must be triggered by a member of the docs team.
           exit 1
 
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version-file: 'package.json'
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
+      - name: Set up Node and dependencies
+        uses: ./.github/actions/node-npm-setup
 
       - name: Run script
         run: |

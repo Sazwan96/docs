@@ -1,8 +1,6 @@
 name: Triage new issue comments
 
-# **What it does**: Adds label triage to new issue comments in the open source repository.
-# **Why we have it**: Update open source project board for review.
-# **Who does it impact**: Docs open source.
+# Labels public issues for triage when external contributors add new comments.
 
 on:
   issue_comment:
@@ -67,7 +65,14 @@ jobs:
           addLabels: 'triage'
           ignoreIfLabeled: true
 
+      - uses: ./.github/actions/create-workflow-failure-issue
+        id: create-failure-issue
+        if: ${{ failure() }}
+        with:
+          token: ${{ secrets.DOCS_BOT_PAT_BASE }}
+
       - uses: ./.github/actions/slack-alert
         if: ${{ failure() }}
         with:
           slack_token: ${{ secrets.SLACK_DOCS_BOT_TOKEN }}
+          issue_url: ${{ steps.create-failure-issue.outputs.issue_url }}

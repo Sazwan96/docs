@@ -1,7 +1,7 @@
 ---
 title: Workflow configuration options for code scanning
 intro: Edit your workflow file to configure how advanced setup scans the code in your project for vulnerabilities and errors.
-permissions: '{% data reusables.permissions.code-scanning-all-alerts %} if [advanced setup](/code-security/code-scanning/creating-an-advanced-setup-for-code-scanning/configuring-advanced-setup-for-code-scanning) is already enabled'
+permissions: '{% data reusables.permissions.code-scanning-all-alerts %} if [advanced setup](/code-security/how-tos/find-and-fix-code-vulnerabilities/configure-code-scanning/configuring-advanced-setup-for-code-scanning) is already enabled'
 redirect_from:
   - /github/finding-security-vulnerabilities-and-errors-in-your-code/configuring-code-scanning
   - /code-security/secure-coding/configuring-code-scanning
@@ -369,7 +369,15 @@ In the workflow file, use the `config-file` parameter of the `init` action to sp
 
 {% data reusables.code-scanning.custom-configuration-file %}
 
-If the configuration file is located in an external private repository, use the `external-repository-token` parameter of the `init` action to specify a token that has access to the private repository.
+{% ifversion codeql-config-property %}
+
+You can also use custom configuration files in default setup and share the same configuration across multiple repositories. For more information, see [AUTOTITLE](/code-security/how-tos/find-and-fix-code-vulnerabilities/manage-your-configuration/edit-default-setup#customizing-default-setup-with-a-configuration-file).
+
+{% data reusables.code-scanning.remote-config-file-registry %}
+
+{% endif %}
+
+If the configuration file is located in an external private repository and you are using {% data variables.product.prodname_code_scanning %} advanced setup, use the `external-repository-token` parameter of the `init` action to specify a token that has access to the private repository.
 
 ```yaml copy
 - uses: {% data reusables.actions.action-codeql-action-init %}

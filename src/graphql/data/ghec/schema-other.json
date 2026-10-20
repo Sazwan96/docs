@@ -21,38 +21,24 @@
   ],
   "objects": [
     {
-      "name": "IssueEventRationale",
-      "id": "issueeventrationale",
-      "href": "/graphql/reference/other#object-issueeventrationale",
-      "description": "<p>Rationale text associated with an issue timeline event.</p>",
+      "name": "CodeCoverageParameters",
+      "id": "codecoverageparameters",
+      "href": "/graphql/reference/other#object-codecoverageparameters",
+      "description": "<p>Enforce minimum line coverage thresholds on pull requests. This rule evaluates\nuploaded coverage data but does not wait for coverage uploads. To ensure\ncoverage is evaluated before merging, make each status check associated with a\ncoverage upload a required status check.</p>",
       "fields": [
         {
-          "name": "actor",
-          "description": "<p>The agent or user who produced the rationale.</p>",
-          "type": "Actor",
-          "id": "actor",
-          "href": "/graphql/reference/users#interface-actor"
+          "name": "maxCoverageDrop",
+          "description": "<p>The maximum percentage points that line coverage may drop relative to the\ndefault branch. Pull requests that reduce line coverage by more than this\namount will be blocked.</p>",
+          "type": "Float",
+          "id": "float",
+          "href": "/graphql/reference/other#scalar-float"
         },
         {
-          "name": "createdAt",
-          "description": "<p>Identifies the date and time when the rationale was created.</p>",
-          "type": "DateTime!",
-          "id": "datetime",
-          "href": "/graphql/reference/other#scalar-datetime"
-        },
-        {
-          "name": "issueEvent",
-          "description": "<p>The issue timeline event this rationale is associated with.</p>",
-          "type": "IssueEventWithRationale",
-          "id": "issueeventwithrationale",
-          "href": "/graphql/reference/issues#union-issueeventwithrationale"
-        },
-        {
-          "name": "rationale",
-          "description": "<p>The reasoning or explanation text for the event.</p>",
-          "type": "String!",
-          "id": "string",
-          "href": "/graphql/reference/other#scalar-string"
+          "name": "minimumCoverage",
+          "description": "<p>The absolute minimum line coverage percentage required. Pull requests with\nline coverage below this threshold will be blocked.</p>",
+          "type": "Float",
+          "id": "float",
+          "href": "/graphql/reference/other#scalar-float"
         }
       ],
       "category": "other"

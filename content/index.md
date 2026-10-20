@@ -9,7 +9,7 @@ featuredLinks:
   popular:
     - /pull-requests/reference/pull-requests
     - /authentication
-    - /copilot/how-tos/get-code-suggestions/get-ide-code-suggestions
+    - /copilot/how-tos/copilot-in-your-ide/copilot-for-common-tasks/get-ide-code-suggestions
     - /get-started/git-basics/managing-remote-repositories
     - /pages
 redirect_from:
@@ -52,7 +52,6 @@ versions:
 children:
   - search
   - get-started
-  - enterprise-onboarding
   - account-and-profile
   - subscriptions-and-notifications
   - authentication
@@ -148,7 +147,7 @@ childGroups:
     children:
       - organizations
       - code-security/how-tos/secure-at-scale
-      - enterprise-onboarding
+      - admin/enterprise-onboarding
       - admin
   - name: Developers
     octicon: CodeSquareIcon
@@ -157,7 +156,6 @@ childGroups:
       - rest
       - graphql
       - webhooks
-      - github-models
   - name: Community
     octicon: GlobeIcon
     children:

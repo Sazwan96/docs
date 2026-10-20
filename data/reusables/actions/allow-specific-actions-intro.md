@@ -3,7 +3,7 @@
 
 ### Allowing select actions{% ifversion actions-workflow-policy %} and reusable workflows{% endif %} to run
 
-When you choose {% data reusables.actions.policy-label-for-select-actions-workflows %}, local actions{% ifversion actions-workflow-policy %} and reusable workflows{% endif %} are allowed, and there are additional options for allowing other specific actions{% ifversion actions-workflow-policy %} and reusable workflows{% endif %}:
+When you choose {% data reusables.actions.policy-label-for-select-actions-workflows %}, local actions (`./` and `$/`){% ifversion actions-workflow-policy %} and reusable workflows{% endif %} are allowed, and there are additional options for allowing other specific actions{% ifversion actions-workflow-policy %} and reusable workflows{% endif %}:
 
 {% data reusables.repositories.settings-permissions-org-policy-note %}
 
@@ -25,5 +25,7 @@ When you choose {% data reusables.actions.policy-label-for-select-actions-workfl
   {% ifversion actions-blocklist-sha-pinning %}
   Use the `!` prefix to block patterns. For example, to allow all actions{% ifversion actions-workflow-policy %} and reusable workflows{% endif %} from the `space-org` organization, but block a specific action like `space-org/action`, you can specify `space-org/*, !space-org/action@*`. By default, only actions{% ifversion actions-workflow-policy %} and reusable workflows{% endif %} specified in the list will be allowed. To allow all actions{% ifversion actions-workflow-policy %} and reusable workflows{% endif %} while also blocking specific actions, you can specify `*, !space-org/action@*`.
   {% endif %}
+
+{% data reusables.actions.lockfile-allowed-actions-sha %}
 
 This procedure demonstrates how to add specific actions{% ifversion actions-workflow-policy %} and reusable workflows{% endif %} to the list.

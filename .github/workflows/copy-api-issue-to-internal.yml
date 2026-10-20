@@ -1,8 +1,7 @@
 name: Copy to API/events issue to docs-content
 
-# **What it does**: Copies an issue in the open source repo to the docs-content repo, comments on and closes the original issue
-# **Why we have it**: OpenAPI/GraphQL schema updates cannot be made in the open source repo. Instead, we copy the issue to an internal issue (we do not transfer so that the issue does not disappear for the contributor) and close the original issue.
-# **Who does it impact**: Open source and docs-content maintainers
+# Copies public API schema issues to docs-content because updates happen internally.
+# It does not transfer them, so the issue stays visible to the contributor.
 
 on:
   issues:
@@ -26,8 +25,9 @@ jobs:
           result-encoding: string
           script: |
             const triggerer_login = context.payload.sender.login
+            // 9919 is the github org and 325922 the docs team; numeric IDs survive renames.
             const teamMembers = await github.request(
-              `/orgs/github/teams/docs/members?per_page=100`
+              `/organizations/9919/team/325922/members?per_page=100`
             )
             const logins = teamMembers.data.map(member => member.login)
             if (logins.includes(triggerer_login)) {
@@ -74,9 +74,16 @@ jobs:
           OLD_ISSUE: ${{ github.event.issue.html_url }}
 
       - name: Check out repo
-        if: ${{ failure() && github.event_name != 'workflow_dispatch' && github.repository == 'github/docs-internal' }}
+        if: ${{ failure() && github.event_name != 'workflow_dispatch' }}
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: ./.github/actions/create-workflow-failure-issue
+        id: create-failure-issue
+        if: ${{ failure() && github.event_name != 'workflow_dispatch' }}
+        with:
+          token: ${{ secrets.DOCS_BOT_PAT_BASE }}
+
       - uses: ./.github/actions/slack-alert
-        if: ${{ failure() && github.event_name != 'workflow_dispatch' && github.repository == 'github/docs-internal' }}
+        if: ${{ failure() && github.event_name != 'workflow_dispatch' }}
         with:
           slack_token: ${{ secrets.SLACK_DOCS_BOT_TOKEN }}
+          issue_url: ${{ steps.create-failure-issue.outputs.issue_url }}

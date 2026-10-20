@@ -31,13 +31,15 @@ You can also enable activity limitations on all repositories owned by your perso
 1. In the sidebar, select **{% octicon "comment-discussion" aria-hidden="true" aria-label="comment-discussion" %} Moderation options**, then click **Interaction limits**.
 {% data reusables.community.set-interaction-limit %}
 
+{% ifversion pull-request-limit %}
+
 ## Limiting concurrent open pull requests for users without write access
 
 In a public repository, you can set a maximum number of pull requests that a user without write access can have open at the same time. When a user without write access reaches the limit, they can close or merge an existing pull request before they can open a new one.
 
 This setting helps maintainers manage contribution volume by preventing users from opening an excessive number of pull requests, which can overwhelm review queues and trigger unnecessary CI runs. The limit only applies to users without write access — users with write access or higher are not affected.
 
-Draft pull requests do not count toward a user's limit. Only open, non-draft pull requests are counted when determining whether a user has reached the maximum.
+You can choose whether draft pull requests count toward a user's limit. If you enable **Count draft pull requests toward the limit**, both draft and non-draft open pull requests count toward the maximum. Otherwise, only open, non-draft pull requests count.
 
 ### Adding trusted contributors to the bypass list
 
@@ -50,7 +52,10 @@ You can manage the bypass list through either the UI or the API. The bypass list
 To configure the pull request limit, navigate to the **Interaction limits** settings page following the same steps described in [AUTOTITLE](/communities/moderating-comments-and-conversations/limiting-interactions-in-your-repository), then:
 
 1. Under **Pull request limits**, select the maximum number of concurrent open pull requests allowed for users without write access.
+1. Optionally, select **Count draft pull requests toward the limit** to include draft pull requests in the maximum.
 1. Optionally, under **Bypass list**, search for and select the users you want to allow to bypass the pull request limit.
+
+{% endif %}
 
 ## Further reading
 

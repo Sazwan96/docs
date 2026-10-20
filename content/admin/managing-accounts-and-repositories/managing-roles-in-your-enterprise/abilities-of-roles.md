@@ -30,6 +30,7 @@ category:
 | Enterprise owner | Can manage all enterprise settings, members, and policies. |
 | {% ifversion ghec %} |
 | Billing manager | Can manage enterprise billing settings. |
+| Enterprise open-source license manager | Can edit license compliance policy. Receives notifications for license alert closure requests. |
 | {% endif %} |
 | {% ifversion enterprise-app-manager %} |
 | App manager | Can manage {% data variables.product.prodname_github_app %} registrations that are owned by the enterprise. |
@@ -68,7 +69,7 @@ Enterprise owners do not have access to organization settings or content by defa
 
 Billing managers only have access to your enterprise's billing settings. They can view and manage:
 
-* User licenses
+* {% data variables.product.github %} user licenses for self-serve volume licensing
 * Usage-based billing
 * Other billing settings
 

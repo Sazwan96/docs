@@ -1,41 +1,32 @@
-/**
- * Link extraction utilities for the link checker system.
- *
- * This module provides functions to extract internal and external links
- * from Markdown content, with support for Liquid template rendering.
- */
-
 import fs from 'fs'
 import path from 'path'
 
 import { createLogger } from '@/observability/logger'
 import { allVersions } from '@/versions/lib/all-versions'
 import { latestStable } from '@/versions/lib/enterprise-server-releases'
+import removeFPTFromPath from '@/versions/lib/remove-fpt-from-path'
 import { getDataByLanguage } from '@/data-directory/lib/get-data'
 import getRedirect from '@/redirects/lib/get-redirect'
 import { isArchivedVersionByPath } from '@/archives/lib/is-archived-version'
+import { getFeaturesByVersion } from '@/versions/middleware/features'
 import type { Context, Page } from '@/types'
 
 const logger = createLogger(import.meta.url)
 
-// Link patterns for Markdown
 const INTERNAL_LINK_PATTERN = /\]\((\/[^()\s]+(?:\([^()]*\)[^()\s]*)*)\)/g
 const AUTOTITLE_LINK_PATTERN = /\[AUTOTITLE\]\(([^)\s]+)\)/g
-// Handles one level of balanced parentheses in URLs (e.g., Wikipedia links).
-// Uses an unrolled loop to avoid catastrophic backtracking on malformed URLs.
+// One balanced parenthesis level covers URLs like https://example.com/a_(b)
+// without catastrophic backtracking.
 const EXTERNAL_LINK_PATTERN = /\]\((https?:\/\/[^()\s]*(?:\([^()]*\)[^()\s]*)*)\)/g
 const IMAGE_LINK_PATTERN = /!\[[^\]]*\]\(([^)]+)\)/g
 
-// Anchor link patterns (for same-page links)
 const ANCHOR_LINK_PATTERN = /\]\(#[^)]+\)/g
 
-// Reference-style link definitions: [id]: /path or [id]: /path "title"
-// Captures the URL from lines like: [ssh-agent-forwarding]: /authentication/...
+// Reference-style definitions look like [id]: /path or [id]: /path "title".
 const LINK_DEFINITION_PATTERN = /^\[[^\]]+\]:\s+(\/[^\s"'(<>]*)/gm
 
-// Links whose href starts with a Liquid tag rather than a literal '/'
-// e.g. ]({%  ifversion fpt %}/enterprise-cloud@latest{% endif %}/path)
-// None of these Liquid tags contain ')' in practice, so [^)]+ is safe.
+// Liquid-prefixed hrefs look like ]({% ifversion fpt %}/enterprise-cloud@latest{% endif %}/path).
+// Tag bodies exclude ) in practice, so the match stops at the link's closing parenthesis.
 const LIQUID_HREF_PATTERN = /\]\(({%[^)]+)\)/g
 
 export interface ExtractedLink {
@@ -46,6 +37,10 @@ export interface ExtractedLink {
   isAutotitle?: boolean
   isImage?: boolean
   isAnchor?: boolean
+  // Internal links keep fragments separate so path resolution ignores them and anchor
+  // validation can still check them against the destination page.
+  // Example: /foo/bar#some-heading stores href /foo/bar and fragment some-heading.
+  fragment?: string
 }
 
 export interface LinkExtractionResult {
@@ -53,19 +48,13 @@ export interface LinkExtractionResult {
   externalLinks: ExtractedLink[]
   anchorLinks: ExtractedLink[]
   imageLinks: ExtractedLink[]
-  /**
-   * Links whose href begins with a Liquid tag (e.g. `]({%  ifversion ... %}/path)`).
-   * The `href` field contains the raw unrendered Liquid string. Callers that need
-   * to validate these links must render the href to obtain its canonical path.
-   */
+  // Liquid-prefixed hrefs keep the raw unrendered value because validation needs the
+  // rendered canonical path.
   liquidPrefixedLinks: ExtractedLink[]
 }
 
-/**
- * Build an array of character offsets at which each line starts.
- * offsets[0] is always 0. Called once per extractLinksFromMarkdown invocation
- * so that getLineAndColumn can use binary search instead of repeated splits.
- */
+// Precomputing line starts lets each match resolve line and column by binary search
+// instead of repeated splits.
 function buildLineOffsets(content: string): number[] {
   const offsets = [0]
   for (let i = 0; i < content.length; i++) {
@@ -74,10 +63,7 @@ function buildLineOffsets(content: string): number[] {
   return offsets
 }
 
-/**
- * Get line and column number for a match using a precomputed line-offset index.
- * Binary search gives O(log L) per call instead of O(matchIndex).
- */
+// Binary search gives logarithmic lookup for each match position.
 function getLineAndColumn(
   lineOffsets: number[],
   matchIndex: number,
@@ -92,33 +78,24 @@ function getLineAndColumn(
   return { line: lo + 1, column: matchIndex - lineOffsets[lo] + 1 }
 }
 
-/**
- * Extract the link text before a Markdown link
- * For `[link text](/path)`, matchIndex points to the `]` in `](/path)`
- */
 function extractLinkText(content: string, matchIndex: number): string | undefined {
-  // matchIndex points to ](/...), so we need to find the opening [
-  // Scan backwards to find the matching [
+  // Scan back from the closing bracket; nested brackets in link text stay approximate.
   let start = matchIndex - 1
 
-  // Simple scan back to find opening bracket
-  // (nested brackets in link text are rare and handled approximately)
   while (start >= 0 && content[start] !== '[') {
     start--
   }
 
   if (start >= 0 && content[start] === '[') {
-    // Extract text between [ and ]
-    // matchIndex points to the start of ](, so the ] is at matchIndex
     const text = content.substring(start + 1, matchIndex)
     return text.length > 0 ? text : undefined
   }
   return undefined
 }
 
-/**
- * Extract all links from raw Markdown content (before Liquid rendering)
- */
+// extractLinksFromMarkdown masks code first because Markdown never renders links inside
+// code blocks or inline code spans. Inline spans require matching maximal backtick runs,
+// so malformed backticks stay literal and real links between them still get checked.
 export function extractLinksFromMarkdown(content: string): LinkExtractionResult {
   const internalLinks: ExtractedLink[] = []
   const externalLinks: ExtractedLink[] = []
@@ -126,8 +103,15 @@ export function extractLinksFromMarkdown(content: string): LinkExtractionResult 
   const imageLinks: ExtractedLink[] = []
   const liquidPrefixedLinks: ExtractedLink[] = []
 
-  // Strip fenced code blocks to avoid checking example/placeholder URLs
-  // Replaces non-newline characters with spaces to preserve line numbers and positions
+  // Path resolution needs hrefs without fragments; a trailing bare # counts as no fragment.
+  const splitFragment = (raw: string): { href: string; fragment?: string } => {
+    const hashIndex = raw.indexOf('#')
+    if (hashIndex === -1) return { href: raw }
+    const fragment = raw.slice(hashIndex + 1)
+    return { href: raw.slice(0, hashIndex), fragment: fragment.length ? fragment : undefined }
+  }
+
+  // Mask backtick-fenced code so placeholder links stay ignored without shifting positions.
   const withoutFences = content.replace(
     /^ {0,3}(`{3,})[^\n]*\n[\s\S]*?^ {0,3}\1\s*$/gm,
     (match) => {
@@ -135,28 +119,19 @@ export function extractLinksFromMarkdown(content: string): LinkExtractionResult 
     },
   )
 
-  // Strip inline code spans too, so example or placeholder links written inside
-  // backticks (e.g. `[AUTOTITLE](/PATH/TO/PAGE)` in the style guide) aren't
-  // treated as real links. Markdown never renders links inside inline code.
-  //
-  // Per CommonMark, a code span opens with a backtick run of length N and closes
-  // with a run of exactly N backticks; both runs must be maximal, i.e. not
-  // adjacent to another backtick. The lookarounds enforce that so mismatched
-  // runs (e.g. `x`` or ``x```) stay literal instead of masking real text (and a
-  // real link) between them, which would let a broken link evade the check.
-  // The content is replaced with spaces to preserve line numbers and positions.
+  // Mask inline code with same-length spaces so examples like `[AUTOTITLE](/PATH)` stay ignored.
   const strippedContent = withoutFences.replace(/(?<!`)(`+)(?!`)[^\n]*?(?<!`)\1(?!`)/g, (match) => {
     return match.replace(/[^\n]/g, ' ')
   })
 
-  // Precompute line-start offsets once so every getLineAndColumn call is O(log L).
+  // Precompute offsets once so every line and column lookup stays logarithmic.
   const lineOffsets = buildLineOffsets(strippedContent)
 
-  // Extract AUTOTITLE links first (they're a special case of internal links)
+  // AUTOTITLE links need the first pass so the generic internal-link pass can skip them.
   let match
   while ((match = AUTOTITLE_LINK_PATTERN.exec(strippedContent)) !== null) {
     const { line, column } = getLineAndColumn(lineOffsets, match.index)
-    const href = match[1].split('#')[0] // Remove anchor if present
+    const { href, fragment } = splitFragment(match[1])
     if (href.startsWith('/')) {
       internalLinks.push({
         href,
@@ -164,24 +139,23 @@ export function extractLinksFromMarkdown(content: string): LinkExtractionResult 
         column,
         text: 'AUTOTITLE',
         isAutotitle: true,
+        fragment,
       })
     }
   }
 
-  // Reset regex
+  // These patterns are module-level and global, so lastIndex survives between calls.
   AUTOTITLE_LINK_PATTERN.lastIndex = 0
 
-  // Extract regular internal links
   while ((match = INTERNAL_LINK_PATTERN.exec(strippedContent)) !== null) {
-    // Skip if this is an AUTOTITLE link (already captured)
+    // The AUTOTITLE pass already recorded this link.
     if (strippedContent.substring(match.index - 10, match.index).includes('AUTOTITLE')) {
       continue
     }
 
     const { line, column } = getLineAndColumn(lineOffsets, match.index)
-    // Extract href from ](/path) format. The destination is captured in group 1,
-    // which handles balanced parentheses (e.g. asset filenames like `(fr).pdf`).
-    const href = match[1].split('#')[0]
+    // Group 1 handles destinations with one level of balanced parentheses, such as files/(fr).pdf.
+    const { href, fragment } = splitFragment(match[1])
     const text = extractLinkText(strippedContent, match.index)
 
     internalLinks.push({
@@ -190,13 +164,12 @@ export function extractLinksFromMarkdown(content: string): LinkExtractionResult 
       column,
       text,
       isAutotitle: false,
+      fragment,
     })
   }
 
-  // Reset regex
   INTERNAL_LINK_PATTERN.lastIndex = 0
 
-  // Extract external links
   while ((match = EXTERNAL_LINK_PATTERN.exec(strippedContent)) !== null) {
     const { line, column } = getLineAndColumn(lineOffsets, match.index)
     const href = match[1]
@@ -210,10 +183,8 @@ export function extractLinksFromMarkdown(content: string): LinkExtractionResult 
     })
   }
 
-  // Reset regex
   EXTERNAL_LINK_PATTERN.lastIndex = 0
 
-  // Extract anchor links
   while ((match = ANCHOR_LINK_PATTERN.exec(strippedContent)) !== null) {
     const { line, column } = getLineAndColumn(lineOffsets, match.index)
     const href = match[0].substring(2, match[0].length - 1)
@@ -226,15 +197,12 @@ export function extractLinksFromMarkdown(content: string): LinkExtractionResult 
     })
   }
 
-  // Reset regex
   ANCHOR_LINK_PATTERN.lastIndex = 0
 
-  // Extract image links
   while ((match = IMAGE_LINK_PATTERN.exec(strippedContent)) !== null) {
     const { line, column } = getLineAndColumn(lineOffsets, match.index)
     const href = match[1]
 
-    // Only include internal images (starting with /)
     if (href.startsWith('/')) {
       imageLinks.push({
         href,
@@ -245,26 +213,23 @@ export function extractLinksFromMarkdown(content: string): LinkExtractionResult 
     }
   }
 
-  // Reset regex
   IMAGE_LINK_PATTERN.lastIndex = 0
 
-  // Extract reference-style link definitions ([id]: /path)
-  // These are distinct from inline links but point to the same targets that need validating.
+  // Reference-style definitions point to the same targets that inline links do.
   while ((match = LINK_DEFINITION_PATTERN.exec(strippedContent)) !== null) {
     const { line, column } = getLineAndColumn(lineOffsets, match.index)
-    const href = match[1].split('#')[0]
+    const { href, fragment } = splitFragment(match[1])
     internalLinks.push({
       href,
       line,
       column,
       isAutotitle: false,
+      fragment,
     })
   }
 
-  // Reset regex
   LINK_DEFINITION_PATTERN.lastIndex = 0
 
-  // Extract links whose href starts with a Liquid tag
   while ((match = LIQUID_HREF_PATTERN.exec(strippedContent)) !== null) {
     const { line, column } = getLineAndColumn(lineOffsets, match.index)
     liquidPrefixedLinks.push({
@@ -274,7 +239,6 @@ export function extractLinksFromMarkdown(content: string): LinkExtractionResult 
     })
   }
 
-  // Reset regex
   LIQUID_HREF_PATTERN.lastIndex = 0
 
   return {
@@ -286,9 +250,6 @@ export function extractLinksFromMarkdown(content: string): LinkExtractionResult 
   }
 }
 
-/**
- * Create a minimal context for Liquid rendering
- */
 export function createLiquidContext(
   version: string = 'free-pro-team@latest',
   language: string = 'en',
@@ -298,27 +259,26 @@ export function createLiquidContext(
     throw new Error(`Unknown version: ${version}`)
   }
 
-  // Load data for the language
   const siteData = getDataByLanguage('variables', language)
 
   return {
     currentVersion: version,
     currentLanguage: language,
     currentVersionObj: versionObj,
-    // Feature flags and version checks
+    // ifversion evaluates bare plan and feature names as context variables.
+    [versionObj.shortName]: true,
     enterpriseServerVersions: Object.values(allVersions)
       .filter((v) => v.plan === 'enterprise-server')
       .map((v) => v.currentRelease),
-    // Site data for variable interpolation
     site: siteData,
-    // Empty pages/redirects - not needed for link extraction
+    // Link extraction only renders Liquid here, so redirects and pages can stay empty.
     pages: {},
     redirects: {},
+    ...getFeaturesByVersion(version),
   } as Context
 }
 
-// Cached reference to renderLiquid — avoids repeated dynamic-import overhead on every call.
-// A dynamic import is still used (not a top-level import) to prevent circular dependency issues.
+// Cache renderLiquid after a dynamic import to avoid circular imports and repeated import overhead.
 type RenderLiquidModule = (template: string, context: Context) => Promise<string>
 let _renderLiquid: RenderLiquidModule | null = null
 async function getCachedRenderLiquid(): Promise<RenderLiquidModule> {
@@ -329,34 +289,30 @@ async function getCachedRenderLiquid(): Promise<RenderLiquidModule> {
   return _renderLiquid
 }
 
-/**
- * Render Liquid templates in content and extract links
- *
- * This renders the Liquid tags (like {% ifversion %}) to get the actual
- * content that would appear for a given version, then extracts links.
- */
+// Unlike extractLinksWithLiquid and renderAndExtractLinks, render failures propagate here.
+// Fragment validation needs this: raw Liquid gives wrong heading IDs and deletes valid fragments.
+export async function renderMarkdownLiquid(content: string, context: Context): Promise<string> {
+  const renderLiquid = await getCachedRenderLiquid()
+  return renderLiquid(content, context)
+}
+
+// Rendered output reflects what a version shows; failed renders fall back to raw Markdown.
 export async function extractLinksWithLiquid(
   content: string,
   context: Context,
 ): Promise<LinkExtractionResult> {
   try {
-    // Dynamic import to avoid circular dependency issues (cached after first load)
     const renderLiquid = await getCachedRenderLiquid()
-    // Render Liquid to expand conditionals
     const rendered = await renderLiquid(content, context)
     return extractLinksFromMarkdown(rendered)
   } catch (error) {
-    // If Liquid rendering fails, fall back to raw extraction
-    // This can happen with malformed templates
+    // Malformed templates are the usual cause.
     logger.warn('Liquid rendering failed, falling back to raw extraction', { error })
     return extractLinksFromMarkdown(content)
   }
 }
 
-/**
- * Render Liquid templates in content, returning both the rendered markdown string and
- * extracted links. Use this when both are needed to avoid rendering the same content twice.
- */
+// Callers that need both outputs avoid a second Liquid render.
 export async function renderAndExtractLinks(
   content: string,
   context: Context,
@@ -371,9 +327,6 @@ export async function renderAndExtractLinks(
   }
 }
 
-/**
- * Get relative path from content root
- */
 export function getRelativePath(filePath: string): string {
   const contentRoot = path.resolve('content')
   const dataRoot = path.resolve('data')
@@ -388,27 +341,15 @@ export function getRelativePath(filePath: string): string {
   return filePath
 }
 
-/**
- * Normalize a link path for comparison with pageMap
- *
- * - Removes query strings
- * - Removes trailing slashes
- * - Removes anchor fragments
- * - Ensures leading slash
- */
 export function normalizeLinkPath(href: string): string {
-  // Remove query string
   let normalized = href.split('?')[0]
 
-  // Remove anchor
   normalized = normalized.split('#')[0]
 
-  // Remove trailing slash
   if (normalized.endsWith('/') && normalized.length > 1) {
     normalized = normalized.slice(0, -1)
   }
 
-  // Ensure leading slash
   if (!normalized.startsWith('/')) {
     normalized = `/${normalized}`
   }
@@ -416,18 +357,17 @@ export function normalizeLinkPath(href: string): string {
   return normalized
 }
 
-/**
- * Check if a path exists in the pageMap or redirects
- */
-export function checkInternalLink(
+// Resolve only direct pageMap hits, matching checkInternalLink's bare and language-prefixed
+// branches. Anchor checks need the target page's precomputed heading IDs, and redirects
+// stay excluded because their final anchor is ambiguous.
+export function resolveInternalLinkKey(
   href: string,
   pageMap: Record<string, Page>,
-  redirects: Record<string, string>,
-): { exists: boolean; isRedirect: boolean; redirectTarget?: string } {
+  version?: string,
+  language = 'en',
+): string | null {
   const normalized = normalizeLinkPath(href)
 
-  // Resolve enterprise-server@latest to actual version, mirroring runtime behavior.
-  // Handle both /enterprise-server@latest/... and /en/enterprise-server@latest/...
   const latestPrefix = '/enterprise-server@latest'
   const stablePrefix = `/enterprise-server@${latestStable}`
   const resolved =
@@ -435,12 +375,84 @@ export function checkInternalLink(
       ? normalized.replace(latestPrefix, stablePrefix)
       : normalized
 
-  // Check if it's a direct page
+  if (pageMap[resolved]) return resolved
+
+  // Prefer the requested version before the bare /en key so GHES anchors hit the GHES cache.
+  const versioned = versionedPageKey(resolved, version, language)
+  if (versioned && pageMap[versioned.key]) return versioned.key
+
+  const withLang = `/${language}${resolved}`
+  if (pageMap[withLang]) return withLang
+
+  return null
+}
+
+// Versionless links need a pageMap key inside the checked version. Paths that already
+// carry a version or language prefix mean something specific and stay unchanged. The
+// redirect table stores the language-stripped form, while pageMap stores the prefix.
+function versionedPageKey(
+  resolved: string,
+  version: string | undefined,
+  language: string,
+): { key: string; withoutLanguage: string } | null {
+  if (!version) return null
+  // Version-qualified paths already name their target version.
+  if (/^\/[a-z-]+@/.test(resolved)) return null
+  // Language-qualified paths already had their direct pageMap lookup.
+  if (/^\/[a-z]{2}(-[a-z]{2})?(\/|$)/.test(resolved)) return null
+
+  const withoutLanguage = removeFPTFromPath(path.posix.join('/', version, resolved))
+  return { key: `/${language}${withoutLanguage}`, withoutLanguage }
+}
+
+// Resolve versionless links inside the checked version first, matching runtime rendering.
+// Without version context, non-FPT versionless links can fall through to fallback redirects
+// and look like links that need updating.
+export function checkInternalLink(
+  href: string,
+  pageMap: Record<string, Page>,
+  redirects: Record<string, string>,
+  version?: string,
+  language = 'en',
+): {
+  exists: boolean
+  isRedirect: boolean
+  redirectTarget?: string
+  requiresVersionContext?: boolean
+} {
+  const normalized = normalizeLinkPath(href)
+
+  // enterprise-server@latest resolves to the latest stable version at runtime.
+  const latestPrefix = '/enterprise-server@latest'
+  const stablePrefix = `/enterprise-server@${latestStable}`
+  const resolved =
+    normalized.startsWith(latestPrefix) || normalized.startsWith(`/en${latestPrefix}`)
+      ? normalized.replace(latestPrefix, stablePrefix)
+      : normalized
+
   if (pageMap[resolved]) {
     return { exists: true, isRedirect: false }
   }
 
-  // Check if it's a redirect
+  // Version-scoped pages must beat fallback redirects on the versionless form.
+  const versioned = versionedPageKey(resolved, version, language)
+  if (versioned) {
+    // Redirect middleware wins over versioned pages, but self-redirects are no-ops.
+    const versionedRedirect = redirects[versioned.withoutLanguage]
+    if (versionedRedirect && versionedRedirect !== versioned.withoutLanguage) {
+      // update-internal-links cannot fix redirects that exist only under a version prefix.
+      return {
+        exists: true,
+        isRedirect: true,
+        redirectTarget: versionedRedirect,
+        requiresVersionContext: !(resolved in redirects),
+      }
+    }
+    if (pageMap[versioned.key]) {
+      return { exists: true, isRedirect: false }
+    }
+  }
+
   if (redirects[resolved]) {
     return {
       exists: true,
@@ -449,7 +461,7 @@ export function checkInternalLink(
     }
   }
 
-  // Check with /en prefix (FPT pages are stored with language prefix)
+  // FPT pages live under language-prefixed pageMap keys.
   const withLang = `/en${resolved}`
   if (pageMap[withLang]) {
     return { exists: true, isRedirect: false }
@@ -463,9 +475,7 @@ export function checkInternalLink(
     }
   }
 
-  // Strip language prefix and check redirects (which are stored without it).
-  // Match hyphenated locales too (e.g. /pt-br/, /zh-cn/) so we don't later
-  // double-prefix them with /en.
+  // Redirects omit locale prefixes, including hyphenated locales like /pt-br and /zh-cn.
   const langPrefixMatch = resolved.match(/^\/[a-z]{2}(-[a-z]{2})?\//)
   if (langPrefixMatch) {
     const withoutLang = resolved.slice(langPrefixMatch[0].length - 1)
@@ -478,28 +488,17 @@ export function checkInternalLink(
     }
   }
 
-  // The path in language-prefixed form, used by the runtime resolvers below.
-  // Avoid double-prefixing when the link already carried a language code.
+  // Runtime resolvers need a language prefix, but locale-prefixed links already have one.
   const withEn = langPrefixMatch ? resolved : withLang
 
-  // Links into deprecated/archived Enterprise Server versions (e.g.
-  // /enterprise-server@3.7/... or the legacy /enterprise/2.1/... format) are
-  // served by the archived enterprise versions system, which isn't loaded into
-  // pageMap. They resolve fine at runtime, so treat them as valid rather than
-  // broken.
+  // /enterprise-server@x.y and legacy /enterprise/x.y paths resolve outside pageMap.
   if (isArchivedVersionByPath(withEn).isArchived) {
     return { exists: true, isRedirect: false }
   }
 
-  // Fall back to the runtime redirect resolver. It handles algorithmic
-  // corrections (version-prefix normalization, /admin, /desktop/guides, etc.)
-  // that the flat redirects map doesn't contain as literal keys. This mirrors
-  // what the production server actually does, so a link that redirects in
-  // production is reported as a redirect here instead of a false broken link.
+  // Runtime redirect resolution catches algorithmic redirects missing from the flat map.
   try {
-    // Only redirects, userLanguage, and pages are read by getRedirect (and the
-    // resolvers it delegates to), so type the object to those fields rather than
-    // casting an arbitrary shape to the full Context.
+    // getRedirect only reads redirects, userLanguage, and pages here.
     const context: Pick<Context, 'redirects' | 'userLanguage' | 'pages'> = {
       redirects,
       userLanguage: 'en',
@@ -507,9 +506,7 @@ export function checkInternalLink(
     }
     const redirect = getRedirect(withEn, context as unknown as Context)
     if (redirect) {
-      // getRedirect returns a language-prefixed path (e.g. /en/...); strip any
-      // locale prefix to match the format used by the flat-map branches above,
-      // and normalize a bare language root (e.g. /en) to /.
+      // Strip locale prefixes to match flat-map branches; a bare locale root normalizes to /.
       return {
         exists: true,
         isRedirect: true,
@@ -517,27 +514,21 @@ export function checkInternalLink(
       }
     }
   } catch {
-    // getRedirect throws on a few fully-deprecated shapes (e.g. github-ae).
-    // Treat those as unresolvable rather than crashing the whole check.
+    // Fully deprecated shapes such as github-ae stay unresolvable instead of crashing.
   }
 
   return { exists: false, isRedirect: false }
 }
 
-/**
- * Check if an asset link points to an existing file on disk
- */
+// checkAssetLink verifies the asset exists on disk; isAssetLink only checks the prefix.
 export function checkAssetLink(href: string): boolean {
   if (!href.startsWith('/assets/')) {
-    return false // Not an asset link
+    return false
   }
-  const assetPath = path.resolve(href.slice(1)) // Remove leading /
+  const assetPath = path.resolve(href.slice(1))
   return fs.existsSync(assetPath)
 }
 
-/**
- * Check if a link is an asset link (starts with /assets/)
- */
 export function isAssetLink(href: string): boolean {
   return href.startsWith('/assets/')
 }

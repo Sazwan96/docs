@@ -10,6 +10,8 @@ redirect_from:
 contentType: how-tos
 category:
   - Manage accounts and repositories
+docsTeamMetrics:
+  - enterprise-onboarding
 ---
 
 Enterprise owners can assign custom and predefined **enterprise roles** to users and teams. Some roles can be assigned to enterprise teams, whereas other roles are only available for individual users. Find the section below for the role you want to assign.
@@ -41,7 +43,7 @@ Before you assign a role, you may need to create a team. Teams are the best way 
 ### Assigning to new users
 
 * If you {% ifversion ghes %}have enabled SCIM provisioning{% else %}use **{% data variables.product.prodname_emus %}**{% endif %}, roles are assigned from your IdP via the SCIM `roles` attribute.
-* Otherwise, you can invite someone as {% ifversion ghes %}an enterprise owner. See {% else %}a user or administrator. See [AUTOTITLE](/admin/managing-accounts-and-repositories/managing-users-in-your-enterprise/invite-users-directly) or {% endif %}[AUTOTITLE](/admin/managing-accounts-and-repositories/managing-users-in-your-enterprise/inviting-people-to-manage-your-enterprise).
+* Otherwise, you can invite someone as {% ifversion ghes %}an enterprise owner. See {% else %}a user or administrator. See [AUTOTITLE](/admin/managing-accounts-and-repositories/managing-users-in-your-enterprise/add-users) or {% endif %}[AUTOTITLE](/admin/managing-accounts-and-repositories/managing-users-in-your-enterprise/inviting-people-to-manage-your-enterprise).
 
 ### Assigning to existing administrators
 

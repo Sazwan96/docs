@@ -10,6 +10,8 @@ redirect_from:
   - /enterprise-onboarding/setting-up-organizations-and-teams/identify-role-requirements
 category:
   - Manage accounts and repositories
+docsTeamMetrics:
+  - enterprise-onboarding
 ---
 
 Roles control people's access to settings and resources in your enterprise and organizations. For an introduction to roles, see [AUTOTITLE](/admin/concepts/enterprise-fundamentals/roles-in-an-enterprise).
@@ -85,7 +87,3 @@ Another way to delegate frequent, time-consuming tasks is to assign work to {% d
 For more information, see [AUTOTITLE](/copilot/how-tos/administer-copilot/manage-for-enterprise/manage-agents/prepare-for-custom-agents).
 
 {% endif %}
-
-## Next steps
-
-Now that you've planned which roles will help your teams be productive and secure on GitHub, create custom roles for the permissions you need. Later, you will create teams to manage role assignments at scale. See [AUTOTITLE](/admin/managing-accounts-and-repositories/managing-roles-in-your-enterprise/create-custom-roles).

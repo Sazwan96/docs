@@ -1,7 +1,7 @@
 ---
 title: Setting code coverage thresholds for pull requests
 shortTitle: Set coverage thresholds
-intro: Protect your code coverage by automatically blocking pull requests that fall below the coverage levels your team requires.
+intro: Prevent pull requests from being merged when uploaded code coverage falls below the levels your team requires.
 allowTitleToDifferFromFilename: true
 versions:
   feature: code-quality
@@ -13,6 +13,14 @@ category:
 
 > [!NOTE]
 > This feature is in {% data variables.release-phases.public_preview %} and subject to change.
+
+## How the code coverage rule works
+
+The **Restrict code coverage** rule evaluates uploaded line coverage data against the configured thresholds. It does not wait for coverage uploads to complete.
+
+To prevent a pull request from being merged before all expected coverage results are available, make each status check associated with an expected coverage upload a required status check. This includes coverage uploaded from separate jobs or workflows.
+
+For more information about line coverage, see [AUTOTITLE](/code-security/reference/code-quality/code-coverage).
 
 ## Prerequisites
 
@@ -28,8 +36,8 @@ category:
 1. Under "Branch rules", select **Restrict code coverage**.
 1. Expand **Additional settings** to configure thresholds. A value of 0 means that the threshold is disabled.
 
-   * **Minimum coverage percentage**: enter a value to block pull requests where aggregated coverage falls below this percentage.
-   * **Maximum coverage drop**: enter a value to block pull requests where coverage drops by more than this many percentage points relative to the default branch.
+   * **Minimum line coverage percentage**: enter a value to block pull requests where aggregated line coverage falls below this percentage.
+   * **Maximum line coverage drop**: enter a value to block pull requests where line coverage drops by more than this many percentage points relative to the default branch.
 
 1. Click **Create** or **Save changes**.
 

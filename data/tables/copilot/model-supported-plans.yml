@@ -19,22 +19,8 @@
   business: true
   enterprise: true
 
-- name: Claude Opus 4.5
-  pro: false
-  pro_plus: false
-  max: false
-  business: true
-  enterprise: true
-
-- name: Claude Opus 4.6
-  pro: false
-  pro_plus: false
-  max: false
-  business: true
-  enterprise: true
-
-- name: Claude Opus 4.7
-  pro: false
+- name: Claude Haiku 5.5
+  pro: true
   pro_plus: true
   max: true
   business: true
@@ -61,6 +47,13 @@
   business: true
   enterprise: true
 
+- name: Claude Opus 5.5
+  pro: false
+  pro_plus: true
+  max: true
+  business: true
+  enterprise: true
+
 - name: Claude Fable 5
   pro: false
   pro_plus: true
@@ -68,8 +61,8 @@
   business: true
   enterprise: true
 
-- name: Claude Sonnet 4.5
-  pro: true
+- name: Claude Fable 5.1
+  pro: false
   pro_plus: true
   max: true
   business: true
@@ -78,9 +71,9 @@
 - name: Claude Sonnet 4.6
   pro: true
   pro_plus: true
-  max: true
-  business: true
-  enterprise: true
+  max: false
+  business: false
+  enterprise: false
 
 - name: Claude Sonnet 5
   pro: true
@@ -89,43 +82,22 @@
   business: true
   enterprise: true
 
-- name: Gemini 2.5 Pro
+- name: Claude Sonnet 5.5
   pro: true
   pro_plus: true
   max: true
   business: true
   enterprise: true
 
-- name: Gemini 3 Flash
+- name: Gemini 3.8 Flash
   pro: true
   pro_plus: true
   max: true
   business: true
   enterprise: true
 
-- name: Gemini 3.1 Pro
-  pro: true
-  pro_plus: true
-  max: true
-  business: true
-  enterprise: true
-
-- name: Gemini 3.5 Flash
-  pro: true
-  pro_plus: true
-  max: true
-  business: true
-  enterprise: true
-
-- name: Gemini 3.6 Flash
-  pro: true
-  pro_plus: true
-  max: true
-  business: true
-  enterprise: true
-
-- name: GPT-5 mini
-  pro: true
+- name: Gemini 4 Argon
+  pro: false
   pro_plus: true
   max: true
   business: true
@@ -138,33 +110,12 @@
   business: true
   enterprise: true
 
-- name: GPT-5.4
-  pro: true
-  pro_plus: true
-  max: true
-  business: true
-  enterprise: true
-
-- name: GPT-5.4 mini
-  pro: true
-  pro_plus: true
-  max: true
-  business: true
-  enterprise: true
-
 - name: GPT-5.4 nano
   pro: false
   pro_plus: true
   max: true
   business: false
   enterprise: false
-
-- name: GPT-5.5
-  pro: false
-  pro_plus: true
-  max: true
-  business: true
-  enterprise: true
 
 - name: GPT-5.6 Luna
   pro: true
@@ -187,23 +138,65 @@
   business: true
   enterprise: true
 
-- name: Kimi K2.7 Code
+- name: GPT-6 Astra
+  pro: false
+  pro_plus: true
+  max: true
+  business: true
+  enterprise: true
+
+- name: GPT-6 Luna
   pro: true
   pro_plus: true
   max: true
   business: true
   enterprise: true
 
-- name: MAI-Code-1-Flash
+- name: GPT-6 Sol
+  pro: false
+  pro_plus: true
+  max: true
+  business: true
+  enterprise: true
+
+- name: GPT-6.1 Sol
+  pro: false
+  pro_plus: true
+  max: true
+  business: true
+  enterprise: true
+
+- name: Grok 4.5
   pro: true
   pro_plus: true
   max: true
   business: true
   enterprise: true
 
-- name: Raptor mini
+- name: Grok 4.6
   pro: true
   pro_plus: true
   max: true
-  business: false
-  enterprise: false
+  business: true
+  enterprise: true
+
+- name: Grok 4.7
+  pro: true
+  pro_plus: true
+  max: true
+  business: true
+  enterprise: true
+
+- name: Kimi K3
+  pro: true
+  pro_plus: true
+  max: true
+  business: true
+  enterprise: true
+
+- name: MAI-Code-1.1-Flash
+  pro: true
+  pro_plus: true
+  max: true
+  business: true
+  enterprise: true

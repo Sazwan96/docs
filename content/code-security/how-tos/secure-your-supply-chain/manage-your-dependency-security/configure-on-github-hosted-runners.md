@@ -25,7 +25,13 @@ If you restrict access to your organization's or repository's private resources,
 {% data reusables.repositories.navigate-to-repo %}
 {% data reusables.repositories.sidebar-settings %}
 {% data reusables.repositories.navigate-to-code-security-and-analysis %}
+{% ifversion dependabot-repository-runner-settings %}
+1. Under "Dependency scanning", in the "{% data variables.product.prodname_dependabot %} version updates" section, next to "Runner type", click {% octicon "pencil" aria-label="Edit runner type" %}.
+1. From the "Runner type" dropdown menu, select **Standard {% data variables.product.github %} runner**.
+1. Click **Save runner selection**.
+{% else %}
 1. Under "Dependabot", to the right of "{% data variables.product.prodname_dependabot %} on Actions runners", click **Enable** to enable the feature or **Disable** to disable it.
+{% endif %}
 
     {% data reusables.dependabot.no-ubuntu-latest-label-self-hosted %}
 
@@ -49,6 +55,8 @@ If a repository in your organization has {% data variables.product.prodname_depe
 ## Enabling or disabling {% data variables.product.prodname_dependabot %} on {% data variables.actions.hosted_runners %}
 
 If you run into {% data variables.product.prodname_dependabot %} timeouts and out-of-memory errors, you may want to use {% data variables.actions.hosted_runners %}, as you can configure these runners to have more resources. You can only enable {% data variables.actions.hosted_runners %} for {% data variables.product.prodname_dependabot %} **for an organization**.
+
+Using {% data variables.actions.hosted_runners %} can help update jobs finish within the 55-minute time limit, but does not increase the limit.
 
 1. Add a {% data variables.actions.hosted_runner %} to your organization and ensure the name specified is `dependabot`. For more information, see [AUTOTITLE](/actions/how-tos/manage-runners/larger-runners/manage-larger-runners#adding-a-larger-runner-to-an-organization).
 1. Opt in the organization to self-hosted runners. For more information, see [AUTOTITLE](/code-security/how-tos/secure-your-supply-chain/manage-your-dependency-security/configure-on-self-hosted-runners#for-your-organization). This step is required, as it ensures that future {% data variables.product.prodname_dependabot %} jobs will run on the larger {% data variables.product.prodname_dotcom %}-hosted runner that has the `dependabot` name.

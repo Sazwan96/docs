@@ -52,19 +52,6 @@ client = CopilotClient(log_level="debug")
 {% codetab go %}
 
 ```golang
-package main
-
-import copilot "github.com/github/copilot-sdk/go"
-
-func main() {
-	client := copilot.NewClient(&copilot.ClientOptions{
-		LogLevel: "debug",
-	})
-	_ = client
-}
-```
-
-```golang
 import copilot "github.com/github/copilot-sdk/go"
 
 client := copilot.NewClient(&copilot.ClientOptions{
@@ -139,21 +126,6 @@ const client = new CopilotClient({
 {% codetab go %}
 
 ```golang
-package main
-
-import copilot "github.com/github/copilot-sdk/go"
-
-func main() {
-	client := copilot.NewClient(&copilot.ClientOptions{
-		Connection: copilot.StdioConnection{
-			Args: []string{"--log-dir", "/path/to/logs"},
-		},
-	})
-	_ = client
-}
-```
-
-```golang
 client := copilot.NewClient(&copilot.ClientOptions{
     Connection: copilot.StdioConnection{
         Args: []string{"--log-dir", "/path/to/logs"},
@@ -193,7 +165,7 @@ var client = new CopilotClient(new CopilotClientOptions
 
 **Solution:**
 
-1. Install the CLI: [Installation guide](/copilot/how-tos/set-up/install-copilot-cli)
+1. Install the CLI: [Installation guide](/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli)
 
 1. Verify installation:
 
@@ -204,7 +176,7 @@ var client = new CopilotClient(new CopilotClientOptions
 1. Or specify the full path:
 
 {% codetabs %}
-{% codetab javascript %}
+{% codetab typescript %}
 
    ```typescript
    const client = new CopilotClient({
@@ -265,7 +237,7 @@ var client = new CopilotClient(new CopilotClientOptions
 1. Or provide a token programmatically:
 
 {% codetabs %}
-{% codetab javascript %}
+{% codetab typescript %}
 
    ```typescript
    const client = new CopilotClient({
@@ -566,7 +538,7 @@ If you're still stuck:
 
 ## See also
 
-* [AUTOTITLE](/copilot/how-tos/copilot-sdk/getting-started)
+* [AUTOTITLE](/copilot/get-started/sdk-quickstart)
 * [AUTOTITLE](/copilot/how-tos/copilot-sdk/features/mcp) - MCP configuration and setup
 * [AUTOTITLE](/copilot/how-tos/copilot-sdk/troubleshooting/mcp-debugging) - Detailed MCP troubleshooting
 * [API Reference](https://github.com/github/copilot-sdk)

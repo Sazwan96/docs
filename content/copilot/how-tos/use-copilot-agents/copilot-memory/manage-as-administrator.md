@@ -27,6 +27,7 @@ Once {% data variables.copilot.copilot_memory %} is enabled, the feature is on f
 {% data reusables.enterprise-accounts.access-enterprise %}
 {% data reusables.enterprise-accounts.ai-controls-tab %}
 1. In the sidebar, click **{% octicon "copilot" aria-hidden="true" aria-label="copilot" %} {% data variables.product.prodname_copilot_short %}**.
+1. Under "Features & clients," click **Configure features & clients**.
 1. Under "Features", scroll down to the **{% data variables.copilot.copilot_memory %}** setting and select a policy from the dropdown.
 
 ### Enabling {% data variables.copilot.copilot_memory %} for an organization
@@ -51,7 +52,7 @@ As an administrator of a repository in which {% data variables.copilot.copilot_m
 
 ## Managing user-level preferences for an organization
 
-As an administrator, you can export or delete all user-level preferences that were generated with your organization as the active billing entity. For more information on the ownership model, see [AUTOTITLE](/copilot/concepts/agents/copilot-memory#user-level-preferences).
+As an administrator, you can export or delete all user-level preferences that were generated with your organization as the active billing entity. For more information on the ownership model, see [AUTOTITLE](/copilot/concepts/prompting-and-context/copilot-memory#user-level-preferences).
 
 ### Exporting user-level preferences
 
@@ -81,7 +82,7 @@ You can delete user-level preferences in bulk or for individual users.
 
 ## Managing user-level preferences for an enterprise
 
-As an administrator, you can export or delete all user-level preferences that were generated with your enterprise as the active billing entity. For more information on the ownership model, see [AUTOTITLE](/copilot/concepts/agents/copilot-memory#user-level-preferences).
+As an administrator, you can export or delete all user-level preferences that were generated with your enterprise as the active billing entity. For more information on the ownership model, see [AUTOTITLE](/copilot/concepts/prompting-and-context/copilot-memory#user-level-preferences).
 
 ### Exporting user-level preferences
 

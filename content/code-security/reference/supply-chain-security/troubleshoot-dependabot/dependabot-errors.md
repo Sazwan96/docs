@@ -88,7 +88,7 @@ If a security vulnerability is released for `B` versions `<2.0.0` and a patch is
 
 ### Can't close pull request for an update that's already been applied
 
-**Error message:** `{% data variables.product.prodname_dependabot %} fails to close a open pull request for an update that has already been applied on the default branch`
+**Error message:** `{% data variables.product.prodname_dependabot %} fails to close an open pull request for an update that has already been applied on the default branch`
 
 {% data variables.product.prodname_dependabot %} will close pull requests for dependency updates, once it detects these updates have been committed to the default branch. However, in rare circumstances, the pull request may remain open.
 
@@ -147,6 +147,14 @@ There are separate limits for security and version update pull requests, so that
 **Error message:** `{% data variables.product.prodname_dependabot %} timed out during its update`
 
 {% data variables.product.prodname_dependabot %} took longer than the maximum time allowed to assess the update required and prepare a pull request. This error is usually seen only for large repositories with many manifest files, for example, npm or yarn monorepo projects with hundreds of _package.json_ files. Updates to the Composer ecosystem also take longer to assess and may time out.
+
+{% ifversion fpt or ghec %} 
+
+{% data variables.product.prodname_dependabot %} update jobs that run on {% data variables.product.prodname_dotcom %}-hosted runners time out after 55 minutes. You cannot increase this time limit.
+
+A job's run time increases with the number of updates it must prepare. Repositories with many outdated dependencies can exceed the limit in a single job. If jobs time out consistently, consider manually updating some dependencies to reduce the workload for future jobs.
+
+{% endif %}
 
 **Resolution for version updates:** Specify the most important dependencies to update using the `allow` parameter or, alternatively, use the `ignore` parameter to exclude some dependencies from updates. Updating your configuration might allow {% data variables.product.prodname_dependabot %} to review the version update and generate the pull request in the time available.
 
@@ -272,6 +280,21 @@ If {% data variables.product.prodname_dependabot %} attempts to check whether de
 **Resolution:** Make sure that all of the referenced dependencies are hosted at accessible locations.
 
 **Version updates only:** {% data reusables.dependabot.private-dependencies-note %} Additionally, {% data variables.product.prodname_dependabot %} doesn't support private {% data variables.product.prodname_dotcom %} dependencies for all package managers. See [AUTOTITLE](/code-security/reference/supply-chain-security/supported-ecosystems-and-repositories).
+
+{% ifversion dependabot-egress-allowlist %}
+
+### Request blocked by the network egress allowlist
+
+Update jobs can only reach hosts on {% data variables.product.prodname_dependabot %}'s network egress allowlist. When a request is blocked, the proxy returns `403 Forbidden` and the job log contains a line naming the host, for example `* egress not allowlisted packages.example.com`.
+
+**Resolution:** Choose the option that matches the blocked host:
+
+* For a private or organization-specific registry, define it under the top-level `registries` key in your `dependabot.yml` file. Reference it from the relevant `updates` entry to allow it for that job. Do this even if the registry allows anonymous access, and note that defining it only in a file such as `.npmrc` or `nuget.config` does not allow its host.{% ifversion org-private-registry-anonymous %} Alternatively, an organization owner can add the registry at the organization level, using the **Anonymous** authentication method if the registry doesn't require authentication.{% endif %}
+* For a public registry or download host, propose adding it to the default allowlist.
+
+For more information, see [AUTOTITLE](/code-security/how-tos/secure-your-supply-chain/manage-your-dependency-security/resolve-a-blocked-host).
+
+{% endif %}
 
 ## Triggering a {% data variables.product.prodname_dependabot %} pull request manually
 

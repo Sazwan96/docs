@@ -1,9 +1,9 @@
 ---
-title: Using your own LLM models in the GitHub Copilot app
-shortTitle: Use your own model provider
+title: Adding LLM models to the GitHub Copilot app
+shortTitle: Add LLM models
 intro: 'Connect a model from an external provider of your choice by supplying your own API key, then use the model in agent sessions.'
 allowTitleToDifferFromFilename: true
-product: '{% data reusables.gated-features.github-app %}<br><a href="https://github.com/features/ai/github-app" target="_blank" class="btn btn-primary mt-3 mr-3 no-underline"><span>Download {% data variables.copilot.github_copilot_app %}</span> {% octicon "link-external" height:16 %}</a>'
+product: '{% data reusables.gated-features.github-app %}<br>{% data reusables.copilot.github-app-download-button %}'
 versions:
   feature: copilot
 contentType: how-tos
@@ -15,16 +15,16 @@ category:
 > [!NOTE]
 > Support to use your own model provider in the {% data variables.copilot.github_copilot_app %} is in {% data variables.release-phases.public_preview %} and subject to change.
 
-You can configure the {% data variables.copilot.github_copilot_app %} to use your own LLM provider, also called BYOK (Bring Your Own Key), instead of {% data variables.product.github %}-hosted models. You can set up your model provider when you first open the app or later in app settings.
+You can configure the {% data variables.copilot.github_copilot_app %} to include models from an LLM provider of your choice—using BYOK (Bring Your Own Key)—in addition to the {% data variables.product.github %}-hosted models. You can set up your model provider when you first open the app or later in app settings.
 
 You must sign in with a {% data variables.product.github %} account to use the app, but you do not need a {% data variables.product.prodname_copilot_short %} plan if you use your own model provider. If you do have a {% data variables.product.prodname_copilot_short %} plan, you can use both your own model provider and {% data variables.product.github %}-hosted models in the same app.
 
 > [!NOTE]
-> This article is for users who want to configure their own LLM provider settings on their local machine. To set up custom models for users in an organization or enterprise, see [AUTOTITLE](/copilot/how-tos/administer-copilot/manage-for-organization/use-your-own-api-keys) and [AUTOTITLE](/copilot/how-tos/administer-copilot/manage-for-enterprise/use-your-own-api-keys).
+> This article is for users who want to configure their own LLM provider settings on their local machine. To set up custom models for users in an organization or enterprise, see [AUTOTITLE](/copilot/how-tos/administer-copilot/manage-for-organization/enable-custom-models) and [AUTOTITLE](/copilot/how-tos/administer-copilot/manage-for-enterprise/enable-custom-models).
 
 ## Supported providers
 
-{% data variables.copilot.github_copilot_app %} supports these model providers:
+The {% data variables.copilot.github_copilot_app %} supports these model providers:
 
 * OpenAI
 * Azure OpenAI
@@ -37,7 +37,7 @@ You must sign in with a {% data variables.product.github %} account to use the a
 
 ## Prerequisites
 
-* The {% data variables.copilot.github_copilot_app %} is installed. For setup steps, see [AUTOTITLE](/copilot/how-tos/github-copilot-app/getting-started).
+* The {% data variables.copilot.github_copilot_app %} is installed. For setup steps, see [AUTOTITLE](/copilot/get-started/quickstart-copilot-app).
 * You have any required credentials, such as API key, for your model provider.
 ## Set up a model provider
 

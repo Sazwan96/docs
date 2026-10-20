@@ -3,15 +3,12 @@ import type { Request, Response, NextFunction } from 'express'
 import { ExtendedRequest } from '@/types'
 import type { Page, Version } from '@/types'
 
-// Fastly provides a Soft Purge feature that allows you to mark content as outdated (stale) instead of permanently
-// purging and thereby deleting it from Fastly's caches. Objects invalidated with Soft Purge will be treated as
-// outdated (stale) while Fastly fetches a new version from origin.
-//
-// Use of a surrogate key is required for soft purging
+// Fastly soft purges mark cached objects stale while origin fetches a fresh copy.
+// Soft purges require surrogate keys.
 // https://docs.fastly.com/en/guides/soft-purges
 // https://docs.fastly.com/en/guides/getting-started-with-surrogate-keys
 
-// What the header needs to be called for Fastly to recognize it.
+// Fastly reads surrogate keys from this response header.
 const KEY = 'surrogate-key'
 
 export const SURROGATE_ENUMS = {
@@ -46,6 +43,7 @@ export function setLanguageFastlySurrogateKey(
     langCode: req.language,
     productId: productSurrogateId(context?.page),
     versionKey: versionSurrogateKey(context?.currentVersionObj),
+    relativePath: context?.page?.relativePath,
   })
   res.set(KEY, keys.join(' '))
   return next()
@@ -58,29 +56,24 @@ export function makeLanguageSurrogateKey(langCode?: string) {
   return `language:${langCode}`
 }
 
-// Build the fine-grained surrogate keys for a content response (docs-engineering#6719).
-// A content page is exactly one of each axis, so ~4 keys per page, well under
-// Fastly's 16 KB Surrogate-Key header limit:
-//
-//   language:<code>              (also emitted for non-content responses)
-//   product:<top-level dir>      e.g. product:actions      (~36)
-//   version:<short release slug> e.g. version:ghes-3.14     (~7-8)
-//   product:<x>,language:<y>     compound, for targeted translation purges
-//
-// These keys are inert: nothing purges the new keys yet. docs-engineering#6720
-// will use them to target the tightest key that covers a deploy instead of
-// soft-purging a whole language. Space is the Fastly delimiter; colons and
-// commas are fine (we already ship `language:en` and `api-search:en`). The
-// language key stays first so anything that only reads the first token (e.g.
-// the caching-headers test helper) keeps working.
+// Content responses get about five keys, one per purge axis,
+// below Fastly's 16 KB header limit.
+// Shapes include language:<code>, product:<top-level-dir>, version:<short-release-slug>,
+// product:<product>,language:<code>, and language:<code>,path:<source-path>.
+// language:<code> also appears on non-content responses.
+// product:<product>,language:<code> targets translation purges.
+// language:<code>,path:<source-path> covers one source page across all versions.
+// Each response emits at most one product key and at most one version key.
 export function makeContentSurrogateKeys({
   langCode,
   productId,
   versionKey,
+  relativePath,
 }: {
   langCode?: string
   productId?: string
   versionKey?: string
+  relativePath?: string
 }): string[] {
   const keys = [makeLanguageSurrogateKey(langCode)]
   if (productId) {
@@ -92,13 +85,26 @@ export function makeContentSurrogateKeys({
   if (versionKey) {
     keys.push(`version:${versionKey}`)
   }
+  const pageKey = makePageSurrogateKey(langCode, relativePath)
+  if (pageKey) {
+    keys.push(pageKey)
+  }
   return keys
 }
 
-// Derive the product id for the `product:` surrogate key from a content page's
-// path. The top-level content directory is the product id (mirrors
-// Page.parentProductId), e.g. `actions`. Returns undefined for non-content
-// responses and the top-level homepage (`content/index.md`).
+// Page surrogate keys cover every version URL for one source page.
+// Example: language:en,path:actions/foo.md.
+// The purge job rebuilds them from changed file paths.
+// Language scoping avoids evicting translations on English deploys.
+// Missing language or path returns undefined for non-content responses.
+export function makePageSurrogateKey(langCode?: string, relativePath?: string): string | undefined {
+  if (!langCode || !relativePath) return undefined
+  return `language:${langCode},path:${relativePath}`
+}
+
+// Product surrogate keys use the top-level content directory, mirroring Page.parentProductId.
+// Example: actions.
+// Non-content responses and the top-level homepage return undefined.
 function productSurrogateId(page?: Page): string | undefined {
   const relativePath = page?.relativePath
   if (!relativePath) return undefined
@@ -107,10 +113,9 @@ function productSurrogateId(page?: Page): string | undefined {
   return id
 }
 
-// Derive the short release slug for the `version:` surrogate key, e.g. `fpt`,
-// `ghec`, `ghes-3.14`. Numbered releases (GHES) get the release appended so a
-// version-scoped purge can target a single release; unnumbered plans use the
-// plain short name.
+// Version surrogate keys use the short name.
+// Numbered GitHub Enterprise Server releases append currentRelease for single-release purges.
+// Unnumbered plans use the short name alone.
 function versionSurrogateKey(versionObj?: Version): string | undefined {
   if (!versionObj) return undefined
   return versionObj.hasNumberedReleases

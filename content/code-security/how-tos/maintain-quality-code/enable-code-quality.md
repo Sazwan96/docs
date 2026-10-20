@@ -57,7 +57,8 @@ Your changes are saved automatically and begin to propagate immediately. In larg
 
 If you're rolling out the feature across many teams, we recommend you pilot on a small group and tune your quality thresholds before you enable everywhere. See [AUTOTITLE](/code-security/how-tos/maintain-quality-code/roll-out-at-scale).
 
-## Next steps
+## Scan frequency after enablement
 
-* **Add code coverage:** Upload reported code coverage from your test suite to see coverage results directly on pull requests. See [AUTOTITLE](/code-security/how-tos/maintain-quality-code/set-up-code-coverage).
-* **For your organization:** Understand the code health of your repositories at a glance. See [AUTOTITLE](/code-security/how-tos/maintain-quality-code/explore-code-quality).
+When you enable {% data variables.product.prodname_code_quality_short %}, an initial {% data variables.product.prodname_codeql %} scan runs on the default branch. Weekly scheduled {% data variables.product.prodname_codeql %} scans start only after a push or pull request triggers a scan. Pushes and pull requests from before enablement do not count as activity.
+
+Weekly scheduled scans pause if no push or pull request has triggered a scan in the last 180 days. Initial scans, scans triggered by configuration or language changes, and scheduled scans do not count as activity. A new push- or pull-request-triggered scan resumes the weekly schedule.

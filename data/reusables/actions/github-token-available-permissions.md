@@ -7,11 +7,11 @@ permissions:
   attestations: read|write|none{% endif %}
   checks: read|write|none{% ifversion code-quality %}
   code-quality: read|write|none{% endif %}
-  contents: read|write|none
+  contents: read|write|none{% ifversion copilot %}
+  copilot-requests: write|none{% endif %}
   deployments: read|write|none{% ifversion fpt or ghec %}
   id-token: write|none{% endif %}
-  issues: read|write|none{% ifversion not ghes %}
-  models: read|none{% endif %}
+  issues: read|write|none
   discussions: read|write|none
   packages: read|write|none
   pages: read|write|none

@@ -1,13 +1,12 @@
 name: 'Lint entire content and data markdown files'
 
-# **What it does**: Lints our content markdown weekly to ensure the content matches the specified styleguide. If errors or warnings exist, it opens an issue for the Docs content team to review.
-# **Why we have it**: Extra precaution to run linter on the entire content/data directories.
-# **Who does it impact**: Docs content.
+# Run the content linter across all content and data Markdown so recurring issues get
+# reported to the Docs content team.
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '20 16 * * 1' # Run every Monday at 16:20 UTC / 8:20 PST
+    - cron: '20 16 * * 1'
 
 permissions:
   contents: read
@@ -43,12 +42,14 @@ jobs:
           REPORT_REPOSITORY: github/docs-content
         run: npm run lint-report -- --path /tmp/lint-results.json
 
+      - uses: ./.github/actions/create-workflow-failure-issue
+        id: create-failure-issue
+        if: ${{ failure() && github.event_name != 'workflow_dispatch' }}
+        with:
+          token: ${{ secrets.DOCS_BOT_PAT_BASE }}
+
       - uses: ./.github/actions/slack-alert
         if: ${{ failure() && github.event_name != 'workflow_dispatch' }}
         with:
           slack_token: ${{ secrets.SLACK_DOCS_BOT_TOKEN }}
-
-      - uses: ./.github/actions/create-workflow-failure-issue
-        if: ${{ failure() && github.event_name != 'workflow_dispatch' }}
-        with:
-          token: ${{ secrets.DOCS_BOT_PAT_BASE }}
+          issue_url: ${{ steps.create-failure-issue.outputs.issue_url }}
